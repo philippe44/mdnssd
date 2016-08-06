@@ -255,7 +255,7 @@ int main(int argc, char* argv[]) {
 
   if (host.s_addr == INADDR_ANY) host.s_addr = get_localhost();
 
-  sock = init_mDNS(debug_mode, host.s_addr);
+  sock = init_mDNS(debug_mode, host);
 
   if (sock < 0) {
 	printf("cannot open socket\n");

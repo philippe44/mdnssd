@@ -954,7 +954,7 @@ static void complete_answers(int sock, char* query_arg, FoundAnswerList* alist) 
 
 
 /*---------------------------------------------------------------------------*/
-int init_mDNS(int dbg, in_addr_t host) {
+int init_mDNS(int dbg, struct in_addr host) {
   int sock;
   int res;
   struct ip_mreq mreq;
@@ -1000,7 +1000,7 @@ int init_mDNS(int dbg, in_addr_t host) {
 
   memset(&mreq, 0, sizeof(mreq));
   mreq.imr_multiaddr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
-  mreq.imr_interface.s_addr = host;
+  mreq.imr_interface.s_addr = host.s_addr;
 
   if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void*) &mreq.imr_interface.s_addr, sizeof(mreq.imr_interface.s_addr)) < 0)  {
 	debug("bound to if failed");

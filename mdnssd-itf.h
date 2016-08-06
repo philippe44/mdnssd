@@ -9,13 +9,14 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
-typedef uint32_t in_addr_t;
+#include <inaddr.h>
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #endif
+
 
 #define MAX_ANSWERS (256)
 
@@ -37,7 +38,7 @@ typedef struct {
 } DiscoveredList;
 
 bool 	query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime);
-int 	init_mDNS(int dbg, in_addr_t host);
+int 	init_mDNS(int dbg, struct in_addr host);
 void 	close_mDNS(int sock);
 void 	free_discovered_list(DiscoveredList* dlist);
 #endif
