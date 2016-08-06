@@ -41,24 +41,26 @@
 
 #include "mdnssd-min.h"
 
-#if !WIN
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #include <net/if.h>
 #endif
 
-#if LINUX || OSX || FREEBSD
+#if defined(linux) || defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/time.h>
 #endif
 
 // is debug mode enabled?
 static int debug_mode;
 
+
+/*---------------------------------------------------------------------------*/
 int debug(const char* format, ...) {
   va_list args;
   int ret;
 
   if(!debug_mode) {
-    return 0;
+	return 0;
   }
   va_start(args, format);
   ret = vfprintf(stderr, format, args);
@@ -67,12 +69,13 @@ int debug(const char* format, ...) {
   return ret;
 }
 
-// clock
+
+/*---------------------------------------------------------------------------*/
 static  uint32_t gettime_ms(void) {
-#if WIN
+#ifdef _WIN32
 	return GetTickCount();
 #else
-#if LINUX || FREEBSD
+#if defined(linux) || defined(__FreeBSD__)
 	struct timespec ts;
 	if (!clock_gettime(CLOCK_MONOTONIC, &ts)) {
 		return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
@@ -84,6 +87,8 @@ static  uint32_t gettime_ms(void) {
 #endif
 }
 
+
+/*---------------------------------------------------------------------------*/
 static void init_answer_list(FoundAnswerList* alist) {
   int i;
 
@@ -94,6 +99,7 @@ static void init_answer_list(FoundAnswerList* alist) {
   alist->completed_length = 0;
 }
 
+/*---------------------------------------------------------------------------*/
 static FoundAnswer* add_new_answer(FoundAnswerList* alist) {
   FoundAnswer* a;
 
@@ -123,6 +129,7 @@ static FoundAnswer* add_new_answer(FoundAnswerList* alist) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static void clear_answer_list(FoundAnswerList* alist) {
   int i;
   for(i=0; i < MAX_ANSWERS; i++) {
@@ -130,7 +137,7 @@ static void clear_answer_list(FoundAnswerList* alist) {
 	  if(alist->answers[i]->name) free(alist->answers[i]->name);
 	  if(alist->answers[i]->hostname) free(alist->answers[i]->hostname);
 	  if (alist->answers[i]->rr) free_resource_record(alist->answers[i]->rr);
- 	  if (alist->answers[i]->txt) free(alist->answers[i]->txt);
+	  if (alist->answers[i]->txt) free(alist->answers[i]->txt);
 	  free(alist->answers[i]);
 	  alist->answers[i] = NULL;
 	}
@@ -140,6 +147,7 @@ static void clear_answer_list(FoundAnswerList* alist) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static char* prepare_query_string(char* name) {
   int i;
   int count;
@@ -171,6 +179,7 @@ static char* prepare_query_string(char* name) {
 
 
 // expects host byte_order
+/*---------------------------------------------------------------------------*/
 static mDNSFlags* mdns_parse_header_flags(uint16_t data) {
   mDNSFlags* flags = malloc(sizeof(mDNSFlags));
 
@@ -193,7 +202,9 @@ static mDNSFlags* mdns_parse_header_flags(uint16_t data) {
   return flags;
 }
 
+
 // outputs host byte order
+/*---------------------------------------------------------------------------*/
 static uint16_t mdns_pack_header_flags(mDNSFlags flags) {
   uint16_t packed = 0;
 
@@ -211,6 +222,8 @@ static uint16_t mdns_pack_header_flags(mDNSFlags flags) {
   return packed;
 }
 
+
+/*---------------------------------------------------------------------------*/
 static char* mdns_pack_question(mDNSQuestion* q, size_t* size) {
   char* packed;
   size_t name_length;
@@ -253,7 +266,9 @@ static char* mdns_pack_question(mDNSQuestion* q, size_t* size) {
   return packed;
 }
 
+
 // parse question section
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_question(char* message, char* data, int size) {
   mDNSQuestion q;
   char* cur;
@@ -274,7 +289,7 @@ static int mdns_parse_question(char* message, char* data, int size) {
   cur += 2;
   parsed += 2;
   if(parsed > size) {
-    return 0;
+	return 0;
   }
 
   memcpy(&(q.qclass), cur, 2);
@@ -289,6 +304,7 @@ static int mdns_parse_question(char* message, char* data, int size) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static void mdns_message_print(mDNSMessage* msg) {
 
   mDNSFlags* flags = mdns_parse_header_flags(msg->flags);
@@ -317,7 +333,9 @@ static void mdns_message_print(mDNSMessage* msg) {
   free(flags);
 }
 
+
 // parse A resource record
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_rr_a(char* data, FoundAnswer* a) {
   // ignore local link responses
   if ((data[0] == '\xa9') && (data[1] == '\xfe')) return 4;
@@ -330,7 +348,9 @@ static int mdns_parse_rr_a(char* data, FoundAnswer* a) {
   return 4;
 }
 
+
 // parse PTR resource record
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_rr_ptr(char* message, char* data, FoundAnswer* a) {
   int parsed = 0;
 
@@ -343,7 +363,9 @@ static int mdns_parse_rr_ptr(char* message, char* data, FoundAnswer* a) {
   return parsed;
 }
 
+
 // parse SRV resource record
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a) {
   uint16_t priority;
   uint16_t weight;
@@ -375,7 +397,9 @@ static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a) {
   return parsed;
 }
 
+
 // parse TXT resource record
+/*---------------------------------------------------------------------------*/
 static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, FoundAnswer* a) {
   if ((a->txt = malloc(rr->rdata_length)) != NULL) {
 	memcpy(a->txt, rr->rdata, rr->rdata_length);
@@ -383,7 +407,9 @@ static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, FoundAnswer
   }
 }
 
+
 // get name compression offset
+/*---------------------------------------------------------------------------*/
 static uint16_t get_offset(char* data) {
   uint16_t offset;
 
@@ -403,6 +429,7 @@ static uint16_t get_offset(char* data) {
 
 // parse a domain name
 // of the type included in resource records
+/*---------------------------------------------------------------------------*/
 static char* parse_rr_name(char* message, char* name, int* parsed) {
 
   int dereference_count = 0;
@@ -474,6 +501,7 @@ static char* parse_rr_name(char* message, char* name, int* parsed) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static void mdns_parse_rdata_type(char* message, mDNSResourceRecord* rr, FoundAnswer* answer) {
 
   switch(rr->type) {
@@ -495,6 +523,8 @@ static void mdns_parse_rdata_type(char* message, mDNSResourceRecord* rr, FoundAn
   }
 }
 
+
+/*---------------------------------------------------------------------------*/
 static void free_resource_record(mDNSResourceRecord* rr) {
   if(!rr) {
 	return;
@@ -507,8 +537,10 @@ static void free_resource_record(mDNSResourceRecord* rr) {
   free(rr);
 }
 
+
 // parse a resource record
 // the answer, authority and additional sections all use the resource record format
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_rr(char* message, char* rrdata, int size, FoundAnswerList* alist, int is_answer) {
   mDNSResourceRecord* rr;
   int parsed = 0;
@@ -584,6 +616,7 @@ static int mdns_parse_rr(char* message, char* rrdata, int size, FoundAnswerList*
 
 
 // TODO this only parses the header so far
+/*---------------------------------------------------------------------------*/
 static int mdns_parse_message_net(char* data, int size, mDNSMessage* msg, FoundAnswerList* alist) {
 
   int parsed = 0;
@@ -629,6 +662,7 @@ static int mdns_parse_message_net(char* data, int size, mDNSMessage* msg, FoundA
 }
 
 
+/*---------------------------------------------------------------------------*/
 static mDNSMessage* mdns_build_query_message(char* query_str, uint16_t query_type) {
   mDNSMessage* msg;
   mDNSQuestion question;
@@ -675,6 +709,7 @@ static mDNSMessage* mdns_build_query_message(char* query_str, uint16_t query_typ
   return msg;
 }
 
+/*---------------------------------------------------------------------------*/
 static char* mdns_pack_message(mDNSMessage* msg, size_t* pack_length) {
   char* pack;
 
@@ -696,7 +731,9 @@ static char* mdns_pack_message(mDNSMessage* msg, size_t* pack_length) {
   return pack;
 }
 
+
 // parse TXT resource record
+/*---------------------------------------------------------------------------*/
 static void mdns_parse_txt(char *txt, int txt_length, struct mDNSItem_s *a) {
 	int len = 0, count = 0;
 	char *p;
@@ -737,6 +774,7 @@ static void mdns_parse_txt(char *txt, int txt_length, struct mDNSItem_s *a) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static void prepare_discovered(FoundAnswerList* alist, DiscoveredList *dlist) {
   int i;
   FoundAnswer* answer = NULL;
@@ -761,6 +799,7 @@ static void prepare_discovered(FoundAnswerList* alist, DiscoveredList *dlist) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 static int send_query(int sock, char* query_arg, uint16_t query_type) {
 
   mDNSMessage* msg;
@@ -796,12 +835,14 @@ static int send_query(int sock, char* query_arg, uint16_t query_type) {
   return res;
 }
 
+
 /*
   An answer is complete if it has all of:
-    * A hostname (from a SRV record)
-    * A port (from a SRV record)
+	* A hostname (from a SRV record)
+	* A port (from a SRV record)
 	* An IP address (from an A record)
  */
+ /*---------------------------------------------------------------------------*/
 static int is_answer_complete(FoundAnswer* a) {
   if(!a->addr.s_addr || !a->hostname || !a->port || !a->txt) {
 	return 0;
@@ -809,25 +850,27 @@ static int is_answer_complete(FoundAnswer* a) {
   return 1;
 }
 
+
 /*
   Attempt to complete an answer
   by trying to find the necessary information
   in the answer list, and if that fails,
   then send a query.
 */
+/*---------------------------------------------------------------------------*/
 static void complete_answer(int sock, FoundAnswerList* alist, FoundAnswer* a) {
   FoundAnswer* b;
   int i;
 
   // attempt to complete answer from existing answer list
   for(i=0; i < alist->length; i++) {
-    b = alist->answers[i];
+	b = alist->answers[i];
 
-    // fill in hostname and port
-    // if a SRV record exists for the service instance name
-    if(!a->hostname || !a->port) {
-      if(b->rr->type == DNS_RR_TYPE_SRV) {
-        if(strcmp(a->name, b->rr->name) == 0) {
+	// fill in hostname and port
+	// if a SRV record exists for the service instance name
+	if(!a->hostname || !a->port) {
+	  if(b->rr->type == DNS_RR_TYPE_SRV) {
+		if(strcmp(a->name, b->rr->name) == 0) {
 		  a->hostname = strdup(b->hostname);
 		  a->port = b->port;
 		}
@@ -881,7 +924,9 @@ static void complete_answer(int sock, FoundAnswerList* alist, FoundAnswer* a) {
   }
 }
 
+
 // attempt to complete the received answers
+/*---------------------------------------------------------------------------*/
 static void complete_answers(int sock, char* query_arg, FoundAnswerList* alist) {
   int i;
   FoundAnswer* a;
@@ -908,7 +953,8 @@ static void complete_answers(int sock, char* query_arg, FoundAnswerList* alist) 
 }
 
 
-int init_mDNS(int dbg, uint32_t host) {
+/*---------------------------------------------------------------------------*/
+int init_mDNS(int dbg, in_addr_t host) {
   int sock;
   int res;
   struct ip_mreq mreq;
@@ -946,7 +992,7 @@ int init_mDNS(int dbg, uint32_t host) {
 	}
 */
 
-#if OSX
+#if (__APPLE__)
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
 	debug("error setting reuseport");
   }
@@ -983,11 +1029,13 @@ int init_mDNS(int dbg, uint32_t host) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 void close_mDNS(int sock) {
 	close(sock);
 }
 
 
+/*---------------------------------------------------------------------------*/
 void free_discovered_list(DiscoveredList* dlist) {
   int i;
 
@@ -1006,6 +1054,7 @@ void free_discovered_list(DiscoveredList* dlist) {
 }
 
 
+/*---------------------------------------------------------------------------*/
 bool query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime) {
   struct sockaddr_in addr;
   socklen_t addrlen;

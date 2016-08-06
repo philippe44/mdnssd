@@ -1,38 +1,15 @@
 #ifndef __MDNSSD_ITF_H
 #define __MDNSSD_ITF_H
 
-#if defined(linux)
-#define LINUX     1
-#define OSX       0
-#define WIN       0
-#define FREEBSD   0
-#elif defined (__APPLE__)
-#define LINUX     0
-#define OSX       1
-#define WIN       0
-#define FREEBSD   0
-#elif defined (_MSC_VER) || defined(__BORLANDC__)
-#define LINUX     0
-#define OSX       0
-#define WIN       1
-#define FREEBSD   0
-#elif defined(__FreeBSD__)
-#define LINUX     0
-#define OSX       0
-#define WIN       0
-#define FREEBSD   1
-#else
-#error unknown target
-#endif
-
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-#if WIN
+#if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
+typedef uint32_t in_addr_t;
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -60,7 +37,7 @@ typedef struct {
 } DiscoveredList;
 
 bool 	query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime);
-int 	init_mDNS(int dbg, uint32_t host);
+int 	init_mDNS(int dbg, in_addr_t host);
 void 	close_mDNS(int sock);
 void 	free_discovered_list(DiscoveredList* dlist);
 #endif
