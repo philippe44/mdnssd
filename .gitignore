@@ -54,4 +54,5 @@ __history
 Win32
 *.map
 *.cbproj
+*.obj
 *.o
