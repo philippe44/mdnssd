@@ -109,17 +109,20 @@ void winsock_close(void) {
 #if !defined(WIN32)
 #define INVALID_SOCKET (-1)
 #endif
-static in_addr_t get_localhost(void)
+static in_addr_t get_localhost(char **name)
 {
 #ifdef WIN32
-	char buf[INET_ADDRSTRLEN];
+	char buf[256];
 	struct hostent *h = NULL;
 	struct sockaddr_in LocalAddr;
 
 	memset(&LocalAddr, 0, sizeof(LocalAddr));
 
-	gethostname(buf, INET_ADDRSTRLEN);
+	gethostname(buf, 256);
 	h = gethostbyname(buf);
+
+	if (name) *name = strdup(buf);
+
 	if (h != NULL) {
 		memcpy(&LocalAddr.sin_addr, h->h_addr_list[0], 4);
 		return LocalAddr.sin_addr.s_addr;
@@ -127,6 +130,11 @@ static in_addr_t get_localhost(void)
 	else return INADDR_ANY;
 #elif defined (__APPLE__) || defined(__FreeBSD__)
 	struct ifaddrs *ifap, *ifa;
+
+	if (name) {
+		*name = malloc(256);
+		gethostname(*name, 256);
+	}
 
 	if (getifaddrs(&ifap) != 0) return INADDR_ANY;
 
@@ -161,6 +169,11 @@ static in_addr_t get_localhost(void)
 	int LocalSock;
 	struct sockaddr_in LocalAddr;
 	int j = 0;
+
+	if (name) {
+		*name = malloc(256);
+		gethostname(*name, 256);
+	}
 
 	/* purify */
 	memset(&ifConf,  0, sizeof(ifConf));
@@ -253,7 +266,7 @@ int main(int argc, char* argv[]) {
    winsock_init();
 #endif
 
-  if (host.s_addr == INADDR_ANY) host.s_addr = get_localhost();
+  if (host.s_addr == INADDR_ANY) host.s_addr = get_localhost(NULL);
 
   sock = init_mDNS(debug_mode, host);
 
