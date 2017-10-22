@@ -279,13 +279,13 @@ int main(int argc, char* argv[]) {
 
   while (count--) {
 
-	query_mDNS(sock, query_arg, &dlist, timeout);
+	query_mDNS(sock, NULL, query_arg, &dlist, timeout);
 	print_discovered(&dlist);
 	printf("===============================================================\n");
 	free_discovered_list(&dlist);
   }
 
-  close_mDNS(sock);
+  close_mDNS(sock, NULL);
 
 #ifdef _WIN32
   winsock_close();

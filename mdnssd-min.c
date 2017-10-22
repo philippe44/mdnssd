@@ -962,11 +962,6 @@ int init_mDNS(int dbg, struct in_addr host) {
   socklen_t addrlen;
   int enable = 1, ttl = 255;
 
-  /*
-  struct in_addr send_addr;
-  list_interfaces(&send_addr);
-  */
-
   debug_mode = dbg;
   debug("Opening socket\n");
   sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -1030,8 +1025,9 @@ int init_mDNS(int dbg, struct in_addr host) {
 
 
 /*---------------------------------------------------------------------------*/
-void close_mDNS(int sock) {
+void close_mDNS(int sock, bool *query_ctrl) {
 	close(sock);
+	if (query_ctrl) *query_ctrl = false;
 }
 
 
@@ -1055,7 +1051,7 @@ void free_discovered_list(DiscoveredList* dlist) {
 
 
 /*---------------------------------------------------------------------------*/
-bool query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime) {
+bool query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dlist, int runtime) {
   struct sockaddr_in addr;
   socklen_t addrlen;
   int res;
@@ -1093,23 +1089,27 @@ bool query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime) {
   FD_ZERO(&active_fd_set);
   FD_SET(sock, &active_fd_set);
 
+  if (query_ctrl) *query_ctrl = true;
+
   debug("Entering main loop\n");
 
   // this protects against a u32 rollover
   while(((now = gettime_ms()) < timeout)) {
 	struct timeval sel_time;
 
-	/*
-	sel_time.tv_usec = ((timeout - now) % 1000) * 1000;
-	sel_time.tv_sec = (timeout - now) / 1000;
-	*/
 	sel_time.tv_sec = 0;
-	sel_time.tv_usec = 500*1000;
+	sel_time.tv_usec = 50*1000;
 
 	read_fd_set = active_fd_set;
 	except_fd_set = active_fd_set;
 
-	res = select(FD_SETSIZE, &read_fd_set, NULL, &except_fd_set, &sel_time);
+	res = select(sock + 1, &read_fd_set, NULL, &except_fd_set, &sel_time);
+
+	if (query_ctrl && !*query_ctrl) {
+		rc = false;
+		break;
+	}
+
 	if(res < 0) {
 	  rc = false;
 	  debug("Select error\n");

@@ -37,8 +37,8 @@ typedef struct {
   int count;
 } DiscoveredList;
 
-bool 	query_mDNS(int sock, char* query_arg, DiscoveredList* dlist, int runtime);
+bool 	query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dlist, int runtime);
 int 	init_mDNS(int dbg, struct in_addr host);
-void 	close_mDNS(int sock);
+void 	close_mDNS(int sock, bool *query_ctrl);
 void 	free_discovered_list(DiscoveredList* dlist);
 #endif

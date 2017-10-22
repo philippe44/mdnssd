@@ -56,3 +56,4 @@ Win32
 *.cbproj
 *.obj
 *.o
+_backup
