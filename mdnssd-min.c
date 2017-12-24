@@ -987,7 +987,7 @@ int init_mDNS(int dbg, struct in_addr host) {
 	}
 */
 
-#if (__APPLE__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
 	debug("error setting reuseport");
   }
