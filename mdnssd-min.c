@@ -960,7 +960,8 @@ int init_mDNS(int dbg, struct in_addr host) {
   struct ip_mreq mreq;
   struct sockaddr_in addr;
   socklen_t addrlen;
-  int enable = 1, ttl = 255;
+  int enable = 1;
+  char param;
 
   debug_mode = dbg;
   debug("Opening socket\n");
@@ -970,8 +971,9 @@ int init_mDNS(int dbg, struct in_addr host) {
 	return -1;
   }
 
-  if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*) &ttl, sizeof(ttl)) < 0) {
-	debug("error setting multicast TTL");
+  param = 32;
+  if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*) &param, sizeof(param)) < 0) {
+	printf("error setting multicast TTL");
 	return -1;
   }
 
@@ -980,12 +982,11 @@ int init_mDNS(int dbg, struct in_addr host) {
 	return -1;
   }
 
-/*
-   if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &enable, sizeof(enable)) < 0) {
-	 debug("error seeting multicast_loop");
-	 return -1;
-	}
-*/
+  param = 1;
+  if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &param, sizeof(param)) < 0) {
+	debug("error seeting multicast_loop");
+	return -1;
+  }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {

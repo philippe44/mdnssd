@@ -1,6 +1,6 @@
 SRC 		= .
 LIBRARY 	=
-DEFINES 	= 
+DEFINES 	+= 
 
 vpath %.c $(SRC)
 
