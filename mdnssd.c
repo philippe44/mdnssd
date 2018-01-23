@@ -48,18 +48,28 @@ typedef uint32_t in_addr_t;
 static int debug_mode;
 
 /*---------------------------------------------------------------------------*/
-void print_discovered(DiscoveredList *dlist) {
-  int i;
+bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
+	mDNSservice_t *s;
 
-  for(i=0; i < dlist->count; i++) {
-	int j;
-	printf("%s\t%u\t%-25s %s\n", inet_ntoa(dlist->items[i].addr), dlist->items[i].port, dlist->items[i].hostname, dlist->items[i].name);
-	if (debug_mode) {
-		for (j=0; j < dlist->items[i].attr_count; j++) {
-		  printf("\t%s =  %s\n", dlist->items[i].attr[j].name, dlist->items[i].attr[j].value);
+	for (s = slist; s; s = s->next) {
+		printf("%s\t%hu\t%-25s %s %u\n", inet_ntoa(s->addr), s->port, s->hostname, s->name, s->since);
+		if (debug_mode)
+		{
+			int j;
+			for (j = 0; j < s->attr_count; j++) {
+			  printf("\t%s =  %s\n", s->attr[j].name, s->attr[j].value);
+			}
 		}
 	}
-  }
+
+	/* options to control loop
+	control_mDNS((struct mDNShandle_s*) cookie, MDNS_RESET);
+	control_mDNS((struct mDNShandle_s*) cookie, MDNS_SUSPEND);
+	*stop = true;
+	*/
+
+	// we have not released the slist
+	return false;
 }
 
 
@@ -238,11 +248,10 @@ static in_addr_t get_localhost(char **name)
 /*																			 */
 /*---------------------------------------------------------------------------*/
 int main(int argc, char* argv[]) {
-  DiscoveredList dlist;
   char* query_arg;
-  int sock;
+  struct mDNShandle_s *handle;
   char *arg_val;
-  int timeout = 5, count = 1;
+  int timeout = 0, count = 1;
   struct in_addr host = { INADDR_ANY };
 
   // get debug argument
@@ -271,9 +280,9 @@ int main(int argc, char* argv[]) {
 
   if (host.s_addr == INADDR_ANY) host.s_addr = get_localhost(NULL);
 
-  sock = init_mDNS(debug_mode, host);
+  handle = init_mDNS(debug_mode, host);
 
-  if (sock < 0) {
+  if (!handle) {
 	printf("cannot open socket\n");
 	exit(1);
   }
@@ -282,13 +291,12 @@ int main(int argc, char* argv[]) {
 
   while (count--) {
 
-	query_mDNS(sock, NULL, query_arg, &dlist, timeout);
-	print_discovered(&dlist);
+	query_mDNS(handle, query_arg, 0, timeout, &print_services, (void*) handle);
 	printf("===============================================================\n");
-	free_discovered_list(&dlist);
+	control_mDNS(handle, MDNS_RESET);
   }
 
-  close_mDNS(sock, NULL);
+  close_mDNS(handle);
 
 #ifdef _WIN32
   winsock_close();

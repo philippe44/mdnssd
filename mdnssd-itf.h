@@ -17,28 +17,34 @@
 #include <unistd.h>
 #endif
 
-
-#define MAX_ANSWERS (256)
-
-typedef struct {
+typedef struct txt_attr_s {
 	char *name;
 	char *value;
-} txt_attr;
+} txt_attr_t;
 
-typedef struct {
-  struct mDNSItem_s {
-	char* name; // name from PTR
-	char* hostname; // from SRV
-	struct in_addr addr; // from A
-	unsigned short port; // from SRVFound;
-	txt_attr *attr;
-	int	attr_count;
-  } items[MAX_ANSWERS];
-  int count;
-} DiscoveredList;
+typedef struct mDNSservice_s {
+  struct mDNSservice_s *next;		// must be first
+  char* name; 						// name from PTR
+  char* hostname; 					// from SRV
+  struct in_addr addr; 				// from A
+  unsigned short port; 				// from SRV;
+  unsigned int since;
+  txt_attr_t *attr;
+  int attr_count;
+} mDNSservice_t;
 
-bool 	query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dlist, int runtime);
-int 	init_mDNS(int dbg, struct in_addr host);
-void 	close_mDNS(int sock, bool *query_ctrl);
-void 	free_discovered_list(DiscoveredList* dlist);
+struct mDNShandle_s;
+
+typedef enum { MDNS_NONE, MDNS_RESET, MDNS_SUSPEND } mDNScontrol_e;
+
+typedef bool mdns_callback_t(mDNSservice_t *services, void *cookie, bool *stop);
+
+bool 					query_mDNS(struct mDNShandle_s *handle, char* query_arg,
+								   int ttl, int runtime, mdns_callback_t *callback,
+								   void *cookie);
+struct mDNShandle_s*	init_mDNS(int dbg, struct in_addr host);
+void 					control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request);
+void 					close_mDNS(struct mDNShandle_s *handle);
+void 					free_list_mDNS(mDNSservice_t *slist);
+mDNSservice_t* 			get_list_mDNS(struct mDNShandle_s *handle);
 #endif

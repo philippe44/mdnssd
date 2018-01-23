@@ -18,7 +18,7 @@
     Section 4.1, 3.2.2 and 3.2.4
 
   DNS RFC: http://tools.ietf.org/html/rfc1034
-    Section 3.7.1
+	Section 3.7.1
 
   DNS Security Extensions RFC: http://tools.ietf.org/html/rfc2535
     Section 6.1
@@ -53,7 +53,6 @@
 // is debug mode enabled?
 static int debug_mode;
 
-
 /*---------------------------------------------------------------------------*/
 int debug(const char* format, ...) {
   va_list args;
@@ -71,79 +70,79 @@ int debug(const char* format, ...) {
 
 
 /*---------------------------------------------------------------------------*/
-static  uint32_t gettime_ms(void) {
+static  uint32_t gettime(void) {
 #ifdef _WIN32
-	return GetTickCount();
+	return GetTickCount() / 1000;
 #else
 #if defined(linux) || defined(__FreeBSD__)
 	struct timespec ts;
 	if (!clock_gettime(CLOCK_MONOTONIC, &ts)) {
-		return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+		return ts.tv_sec;
 	}
 #endif
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	return tv.tv_sec;
 #endif
 }
 
 
 /*---------------------------------------------------------------------------*/
-static void init_answer_list(FoundAnswerList* alist) {
-  int i;
+static struct item_s *insert_item(void *_item, void **_list) {
+  struct item_s *item = (struct item_s*) _item, **list = (struct item_s**) _list;
 
-  for(i=0; i < MAX_ANSWERS; i++) {
-	alist->answers[i] = NULL;
-  }
-  alist->length = 0;
-  alist->completed_length = 0;
+  if (*list) item->next = *list;
+  else item->next = NULL;
+
+  *list = item;
+
+  return item;
 }
 
 /*---------------------------------------------------------------------------*/
-static FoundAnswer* add_new_answer(FoundAnswerList* alist) {
-  FoundAnswer* a;
+static struct item_s *remove_item(void *_item, void **_list) {
+  struct item_s *item = (struct item_s*) _item, **list = (struct item_s**) _list;
 
-  if(alist->length >= MAX_ANSWERS) {
-	debug("Max answers reached");
-	return NULL;
+  if (item != *list) {
+	struct item_s *p = *list;
+	while (p && p->next != item) p = p->next;
+	if (p) p->next = item->next;
+	item->next = NULL;
+  } else *list = (*list)->next;
+
+  return item;
+}
+
+/*---------------------------------------------------------------------------*/
+static void clear_list(void* _list, void (*free_func)(void *)) {
+  struct item_s *p, *list = (struct item_s*) _list;
+
+  if (!list) return;
+
+  p = list;
+
+  while (p) {
+	struct item_s *next = p->next;
+	if (free_func) (*free_func)(p);
+	else free(p);
+	p = next;
   }
-
-  a = malloc(sizeof(FoundAnswer));
-
-  if(!a) {
-	debug("Could not allocate memory for a found answer");
-	return NULL;
-  }
-
-  a->name = NULL;
-  a->hostname = NULL;
-  a->port = 0;
-  a->srv_query_sent = 0;
-  a->a_query_sent = 0;
-  a->addr.s_addr = 0;
-  a->txt = NULL;
-  a->txt_length = 0;
-  alist->answers[alist->length] = a;
-  alist->length++;
-  return a;
 }
 
 
 /*---------------------------------------------------------------------------*/
-static void clear_answer_list(FoundAnswerList* alist) {
-  int i;
-  for(i=0; i < MAX_ANSWERS; i++) {
-	if(alist->answers[i]) {
-	  if(alist->answers[i]->name) free(alist->answers[i]->name);
-	  if(alist->answers[i]->hostname) free(alist->answers[i]->hostname);
-	  if (alist->answers[i]->rr) free_resource_record(alist->answers[i]->rr);
-	  if (alist->answers[i]->txt) free(alist->answers[i]->txt);
-	  free(alist->answers[i]);
-	  alist->answers[i] = NULL;
-	}
-  }
-  alist->length = 0;
-  alist->completed_length = 0;
+static void free_a(alist_t* a) {
+	if (a->name) free(a->name);
+	free(a);
+}
+
+
+/*---------------------------------------------------------------------------*/
+static void free_s(slist_t* s) {
+	if (s->name) free(s->name);
+	if (s->hostname) free(s->hostname);
+	if (s->txt) free(s->txt);
+	free(s);
 }
 
 
@@ -336,14 +335,14 @@ static void mdns_message_print(mDNSMessage* msg) {
 
 // parse A resource record
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_rr_a(char* data, FoundAnswer* a) {
+static int mdns_parse_rr_a(char* data, struct in_addr *addr) {
+  addr->s_addr = INADDR_ANY;
   // ignore local link responses
   if ((data[0] == '\xa9') && (data[1] == '\xfe')) return 4;
 
-  memcpy(&(a->addr), data, 4);
-  //  a->type = DNS_RR_TYPE_A;
+  memcpy(&(addr->s_addr), data, 4);
 
-  debug("        A: %s\n", inet_ntoa(a->addr));
+  debug("        A: %s\n", inet_ntoa(*addr));
 
   return 4;
 }
@@ -351,14 +350,12 @@ static int mdns_parse_rr_a(char* data, FoundAnswer* a) {
 
 // parse PTR resource record
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_rr_ptr(char* message, char* data, FoundAnswer* a) {
+static int mdns_parse_rr_ptr(char* message, char* data, char **name) {
   int parsed = 0;
 
-  a->name = parse_rr_name(message, data, &parsed);
+  *name = parse_rr_name(message, data, &parsed);
 
-  //  a->type = DNS_RR_TYPE_PTR;
-
-  debug("        PTR: %s\n", a->name);
+  debug("        PTR: %s\n", *name);
 
   return parsed;
 }
@@ -366,7 +363,7 @@ static int mdns_parse_rr_ptr(char* message, char* data, FoundAnswer* a) {
 
 // parse SRV resource record
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a) {
+static int mdns_parse_rr_srv(char* message, char* data, char **hostname, unsigned short *port) {
   uint16_t priority;
   uint16_t weight;
   int parsed = 0;
@@ -382,17 +379,15 @@ static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a) {
   data += 2;
   parsed += 2;
 
-  memcpy(&(a->port), data, 2);
-  a->port = ntohs(a->port);
+  memcpy(port, data, 2);
+  *port = ntohs(*port);
   data += 2;
   parsed += 2;
 
-  //  a->type = DNS_RR_TYPE_SRV;
+  *hostname = parse_rr_name(message, data, &parsed);
 
-  a->hostname = parse_rr_name(message, data, &parsed);
-
-  debug("        SRV target: %s\n", a->hostname);
-  debug("        SRV port: %u\n", a->port);
+  debug("        SRV target: %s\n", *hostname);
+  debug("        SRV port: %u\n", *port);
 
   return parsed;
 }
@@ -400,10 +395,10 @@ static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a) {
 
 // parse TXT resource record
 /*---------------------------------------------------------------------------*/
-static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, FoundAnswer* a) {
-  if ((a->txt = malloc(rr->rdata_length)) != NULL) {
-	memcpy(a->txt, rr->rdata, rr->rdata_length);
-	a->txt_length = rr->rdata_length;
+static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, char**txt, int *length) {
+  if ((*txt = malloc(rr->rdata_length)) != NULL) {
+	memcpy(*txt, rr->rdata, rr->rdata_length);
+	*length = rr->rdata_length;
   }
 }
 
@@ -502,58 +497,28 @@ static char* parse_rr_name(char* message, char* name, int* parsed) {
 
 
 /*---------------------------------------------------------------------------*/
-static void mdns_parse_rdata_type(char* message, mDNSResourceRecord* rr, FoundAnswer* answer) {
-
-  switch(rr->type) {
-  case DNS_RR_TYPE_A:
-	mdns_parse_rr_a(rr->rdata, answer);
-	break;
-  case DNS_RR_TYPE_PTR:
-	mdns_parse_rr_ptr(message, rr->rdata, answer);
-	break;
-  case DNS_RR_TYPE_SRV:
-	mdns_parse_rr_srv(message, rr->rdata, answer);
-	break;
-  case DNS_RR_TYPE_TXT:
-	mdns_parse_rr_txt(message, rr, answer);
-	break;
-  case DNS_RR_TYPE_CNAME:
-  default:
-	debug("      [skipped irrelevant record]\n");
-  }
-}
-
-
-/*---------------------------------------------------------------------------*/
 static void free_resource_record(mDNSResourceRecord* rr) {
-  if(!rr) {
-	return;
-  }
   if(rr->name) {
 	free(rr->name);
 	rr->name = NULL;
   }
-
-  free(rr);
 }
 
 
 // parse a resource record
 // the answer, authority and additional sections all use the resource record format
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_rr(char* message, char* rrdata, int size, FoundAnswerList* alist, int is_answer) {
-  mDNSResourceRecord* rr;
+static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata, int size, int is_answer) {
+  mDNSResourceRecord rr;
   int parsed = 0;
   char* cur = rrdata;
-  FoundAnswer* answer;
 
-  rr = malloc(sizeof(mDNSResourceRecord));
-  rr->name = NULL;
+  rr.name = NULL;
 
-  rr->name = parse_rr_name(message, rrdata, &parsed);
-  if(!rr->name) {
+  rr.name = parse_rr_name(message, rrdata, &parsed);
+  if(!rr.name) {
 	// TODO are calling functions dealing with this correctly?
-	free_resource_record(rr);
+	free_resource_record(&rr);
 	debug("parsing resource record name failed\n");
 	return 0;
   }
@@ -563,61 +528,58 @@ static int mdns_parse_rr(char* message, char* rrdata, int size, FoundAnswerList*
   // +10 because type, class, ttl and rdata_lenth
   // take up total 10 bytes
   if(parsed+10 > size) {
-	free_resource_record(rr);
+	free_resource_record(&rr);
 	return 0;
   }
 
-  debug("      Resource Record Name: %s\n", rr->name);
+  debug("      Resource Record Name: %s\n", rr.name);
 
-  memcpy(&(rr->type), cur, 2);
-  rr->type = ntohs(rr->type);
+  memcpy(&(rr.type), cur, 2);
+  rr.type = ntohs(rr.type);
   cur += 2;
   parsed += 2;
 
-  debug("      Resource Record Type: %u\n", rr->type);
+  debug("      Resource Record Type: %u\n", rr.type);
 
-  memcpy(&(rr->class), cur, 2);
-  rr->class = ntohs(rr->class);
+  memcpy(&(rr.class), cur, 2);
+  rr.class = ntohs(rr.class);
   cur += 2;
   parsed += 2;
 
-  memcpy(&(rr->ttl), cur, 4);
-  rr->ttl = ntohl(rr->ttl);
+  memcpy(&(rr.ttl), cur, 4);
+  rr.ttl = ntohl(rr.ttl);
   cur += 4;
   parsed += 4;
 
-  memcpy(&(rr->rdata_length), cur, 2);
-  rr->rdata_length = ntohs(rr->rdata_length);
+  memcpy(&(rr.rdata_length), cur, 2);
+  rr.rdata_length = ntohs(rr.rdata_length);
   cur += 2;
   parsed += 2;
 
   if(parsed > size) {
-	free_resource_record(rr);
+	free_resource_record(&rr);
 	return 0;
   }
 
-  rr->rdata = cur;
-  parsed += rr->rdata_length;
+  rr.rdata = cur;
+  parsed += rr.rdata_length;
 
-  if(is_answer) {
-	if ((answer = add_new_answer(alist)) == NULL) {
-		free_resource_record(rr);
-		return parsed;
-	}
-	answer->rr = rr;
-	mdns_parse_rdata_type(message, rr, answer);
+  if (is_answer) {
+	if (rr.type == DNS_RR_TYPE_A) store_a(context, &rr);
+	else store_other(context, message, &rr);
   }
-  else free_resource_record(rr);
+
+  free_resource_record(&rr);
 
   debug("    ------------------------------\n");
 
-   return parsed;
+  return parsed;
 }
 
 
 // TODO this only parses the header so far
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_message_net(char* data, int size, mDNSMessage* msg, FoundAnswerList* alist) {
+static int mdns_parse_message_net(struct context_s *context, char* data, int size, mDNSMessage* msg) {
 
   int parsed = 0;
   int i;
@@ -645,17 +607,17 @@ static int mdns_parse_message_net(char* data, int size, mDNSMessage* msg, FoundA
   debug("  Answer records [%u]\n", msg->an_count);
   for(i=0; i < msg->an_count; i++) {
 	//debug("    Answer record %u of %u\n", i+1, msg->an_count);
-	parsed += mdns_parse_rr(data, data+parsed, size-parsed, alist, 1);
+	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 1);
   }
 
   debug("  Nameserver records [%u] (not shown)\n", msg->ns_count);
   for(i=0; i < msg->ns_count; i++) {
-	parsed += mdns_parse_rr(data, data+parsed, size-parsed, alist, 0);
+	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 0);
   }
 
   debug("  Additional records [%u] (not shown)\n", msg->ns_count);
   for(i=0; i < msg->ar_count; i++) {
-	parsed += mdns_parse_rr(data, data+parsed, size-parsed, alist, 1);
+	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 1);
   }
 
   return parsed;
@@ -734,7 +696,7 @@ static char* mdns_pack_message(mDNSMessage* msg, size_t* pack_length) {
 
 // parse TXT resource record
 /*---------------------------------------------------------------------------*/
-static void mdns_parse_txt(char *txt, int txt_length, struct mDNSItem_s *a) {
+static void mdns_parse_txt(char *txt, int txt_length, mDNSservice_t *s) {
 	int len = 0, count = 0;
 	char *p;
 	int i;
@@ -746,56 +708,31 @@ static void mdns_parse_txt(char *txt, int txt_length, struct mDNSItem_s *a) {
 		count++;
 	}
 
-	a->attr_count = count;
-	a->attr = malloc(count * sizeof(txt_attr));
+	s->attr_count = count;
+	s->attr = malloc(count * sizeof(txt_attr_t));
 
 	p = txt;
 	for (i = 0; i < count; i++) {
 		char *value = memchr(p + 1, '=', *p);
 		if (value) {
 			len = *p - (value - (p + 1)) - 1;
-			a->attr[i].value = malloc(len + 1);
-			memcpy(a->attr[i].value, value + 1, len);
-			a->attr[i].value[len] = '\0';
+			s->attr[i].value = malloc(len + 1);
+			memcpy(s->attr[i].value, value + 1, len);
+			s->attr[i].value[len] = '\0';
 			len = (value - (p + 1));
-			a->attr[i].name = malloc(len + 1);
-			memcpy(a->attr[i].name, p + 1, len);
-			a->attr[i].name[len] = '\0';
+			s->attr[i].name = malloc(len + 1);
+			memcpy(s->attr[i].name, p + 1, len);
+			s->attr[i].name[len] = '\0';
 		}
 		else {
 			len = *p;
-			a->attr[i].name = malloc(len + 1);
-			memcpy(a->attr[i].name, p + 1, len);
-			a->attr[i].name[len] = '\0';
-			a->attr[i].value = NULL;
+			s->attr[i].name = malloc(len + 1);
+			memcpy(s->attr[i].name, p + 1, len);
+			s->attr[i].name[len] = '\0';
+			s->attr[i].value = NULL;
 		}
 		p += *p + 1;
 	}
-}
-
-
-/*---------------------------------------------------------------------------*/
-static void prepare_discovered(FoundAnswerList* alist, DiscoveredList *dlist) {
-  int i;
-  FoundAnswer* answer = NULL;
-
-  dlist->count = 0;
-
-  for(i=0; i < alist->length; i++) {
-	answer = alist->answers[i];
-	if(!answer) {
-		continue;
-	}
-	if(!is_answer_complete(answer)) {
-	  continue;
-	}
-	dlist->items[dlist->count].name = strdup(answer->name);
-	dlist->items[dlist->count].hostname = strdup(answer->hostname);
-	dlist->items[dlist->count].addr = answer->addr;
-	dlist->items[dlist->count].port = answer->port;
-	mdns_parse_txt(answer->txt, answer->txt_length, &dlist->items[dlist->count]);
-	dlist->count++;
-  }
 }
 
 
@@ -843,118 +780,196 @@ static int send_query(int sock, char* query_arg, uint16_t query_type) {
 	* An IP address (from an A record)
  */
  /*---------------------------------------------------------------------------*/
-static int is_answer_complete(FoundAnswer* a) {
-  if(!a->addr.s_addr || !a->hostname || !a->port || !a->txt) {
-	return 0;
+static int is_complete(slist_t *s) {
+  if (s->addr.s_addr && s->hostname && s->port && s->txt) return 1;
+  else return 0;
+}
+
+/*---------------------------------------------------------------------------*/
+static void store_a(struct context_s *context, mDNSResourceRecord* rr) {
+  alist_t *b;
+  struct in_addr addr;
+
+  mdns_parse_rr_a(rr->rdata, &addr);
+
+  for (b = context->alist; b; b = b->next) {
+
+	if (!strcmp(b->name, rr->name)) {
+		if (addr.s_addr) b->addr = addr;
+		b->eol = gettime() + rr->ttl;
+		return;
+	}
   }
-  return 1;
+
+  b = malloc(sizeof(alist_t));
+  b->addr = addr;
+  b->name = strdup(rr->name);
+  b->eol = gettime() + rr->ttl;
+
+  insert_item((void*) b, (void**) &context->alist);
 }
 
 
-/*
-  Attempt to complete an answer
-  by trying to find the necessary information
-  in the answer list, and if that fails,
-  then send a query.
-*/
 /*---------------------------------------------------------------------------*/
-static void complete_answer(int sock, FoundAnswerList* alist, FoundAnswer* a) {
-  FoundAnswer* b;
-  int i;
+slist_t *create_s(char *name, slist_t **list) {
+  slist_t *s = calloc(1, sizeof(slist_t));
+  s->name = strdup(name);
+  insert_item((void*) s, (void**) list);
+  return s;
+}
 
-  // attempt to complete answer from existing answer list
-  for(i=0; i < alist->length; i++) {
-	b = alist->answers[i];
 
-	// fill in hostname and port
-	// if a SRV record exists for the service instance name
-	if(!a->hostname || !a->port) {
-	  if(b->rr->type == DNS_RR_TYPE_SRV) {
-		if(strcmp(a->name, b->rr->name) == 0) {
-		  a->hostname = strdup(b->hostname);
-		  a->port = b->port;
-		}
-	  }
-	  continue;
+/*---------------------------------------------------------------------------*/
+static void store_other(struct context_s *context, char *message, mDNSResourceRecord* rr) {
+  slist_t *b = NULL;
+  char *name = NULL;
+  uint32_t now, ttl;
+
+  if (!strstr(rr->name, context->query))  return;
+
+  now = gettime();
+  ttl = (context->ttl && context->ttl < rr->ttl) ? context->ttl : rr->ttl;
+
+  switch (rr->type) {
+
+	// PTR: only use TTL if its 0 which means service disconnect
+	case DNS_RR_TYPE_PTR: {
+	  mdns_parse_rr_ptr(message, rr->rdata, &name);
+
+	  // can't factorize the "for/switch" as name is update above
+	  for (b = context->slist; b && strcmp(b->name, name); b = b->next);
+	  if (!b) b = create_s(name, &context->slist);
+
+	  b->eol[0] = now + ttl;
+	  free(name);
+	  break;
 	}
 
-	// fill in IP address
-	// if an A record exists for the hostname
-	if(!a->addr.s_addr) {
-	  if(b->rr->type == DNS_RR_TYPE_A) {
-		if(strcmp(a->hostname, b->rr->name) == 0) {
-		  a->addr.s_addr = b->addr.s_addr;
-		}
+	// SRV: service descriptor ==> get hostname & port
+	case DNS_RR_TYPE_SRV: {
+	  unsigned short port;
+	  char *hostname = NULL;
+
+	  mdns_parse_rr_srv(message, rr->rdata, &hostname, &port);
+
+	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
+	  if (!b) b = create_s(rr->name, &context->slist);
+
+	  // update port
+	  if (port && b->port != port) {
+		b->port = port;
+		b->status = MDNS_UPDATED;
 	  }
+	  // update hostname
+	  if (!b->hostname || strcmp(b->hostname, hostname)) {
+		NFREE(b->hostname);
+		b->status = MDNS_UPDATED;
+		b->hostname = strdup(hostname);
+	  }
+	  b->eol[1] = now + ttl;
+	  free(hostname);
+	  break;
 	}
 
-	// fill in TXT information
-	// if an TXT record exists for the hostname
-	if(!a->txt) {
-	  if(b->rr->type == DNS_RR_TYPE_TXT) {
-		if(strcmp(a->name, b->rr->name) == 0) {
-		  a->txt = malloc(b->txt_length);
-		  a->txt_length = b->txt_length;
-		  memcpy(a->txt, b->txt, b->txt_length);
-		}
-	  }
-	}
+	// TXT: get txt content
+	case DNS_RR_TYPE_TXT: {
+	  char *txt = NULL;
+	  int length = 0;
 
-	// done with this one
-	if (a->hostname && a->port && a->addr.s_addr && a->txt) {
-	  alist->completed_length++;
+	  mdns_parse_rr_txt(message, rr, &txt, &length);
+
+	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
+	  if (!b) b = create_s(rr->name, &context->slist);
+
+	  // update txt
+	  if (!b->txt || memcmp(b->txt, txt, length)) {
+		NFREE(b->txt);
+		b->txt = malloc(length);
+		b->txt_length = length;
+		memcpy(b->txt, txt, length);
+		b->status = MDNS_UPDATED;
+	  }
+	  b->eol[2] = now + ttl;
+	  free(txt);
 	  break;
 	}
   }
 
-  // if answer is still not complete
-  // send additional query
-  if(!a->hostname || !a->port) {
-	if(!a->srv_query_sent) {
-	  if (send_query(sock, a->name, DNS_RR_TYPE_SRV) != -1)
-		a->srv_query_sent = 1;
-	 }
-  } else {
-	if(!a->addr.s_addr) {
-	  if(a->a_query_sent) {
-		if (send_query(sock, a->hostname, DNS_RR_TYPE_PTR) != -1)
-			a->a_query_sent = 1;
-	  }
+  // when was it last seen
+  if (b) b->seen = now;
+}
+
+/*---------------------------------------------------------------------------*/
+static mDNSservice_t *build_update(struct context_s *context, bool build) {
+  mDNSservice_t *services = NULL;
+  uint32_t now = gettime();
+  alist_t *a;
+  slist_t *s;
+
+  // cleanup the alist
+  a = context->alist;
+  while (a) {
+	alist_t *next = a->next;
+	if (a->eol - now > 0x7fffffff) {
+		remove_item((void*) a, (void**) &context->alist);
+		free_a(a);
 	}
+	a = next;
   }
+
+  // build the update
+  s = context->slist;
+  while (s) {
+	slist_t *next = s->next;
+
+	// got a complete answer, search for A
+	if (s->hostname && s->port && s->txt) {
+		for (a = context->alist; a; a = a->next) {
+			if (strcmp(s->hostname, a->name)) continue;
+			if (s->addr.s_addr != a->addr.s_addr) {
+				s->addr.s_addr = a->addr.s_addr;
+				s->status = MDNS_UPDATED;
+			}
+			break;
+		}
+	}
+
+	// build the service list if required
+	if (build && is_complete(s) && s->status != MDNS_CURRENT) {
+		mDNSservice_t *p = malloc(sizeof(mDNSservice_t));
+		p->name = strdup(s->name);
+		p->hostname = strdup(s->hostname);
+		p->addr = s->addr;
+		p->port = s->port;
+		p->since = now - s->seen;
+		mdns_parse_txt(s->txt, s->txt_length, p);
+		insert_item((void*) p, (void**) &services);
+		s->status = MDNS_CURRENT;
+	}
+
+	// a service has expired
+	if (s->eol[0] - now > 0x7fffffff || s->eol[1] - now > 0x7fffffff || s->eol[2] - now > 0x7fffffff) {
+		// set IP & port to zero so that caller knows, but txt is needed
+		if (build && is_complete(s)) {
+			mDNSservice_t *p = calloc(1,sizeof(mDNSservice_t));
+			p->name = strdup(s->name);
+			p->hostname = strdup(s->hostname);
+			mdns_parse_txt(s->txt, s->txt_length, p);
+			insert_item((void*) p, (void**) &services);
+		}
+		remove_item((void*) s, (void**) &context->slist);
+		free_s(s);
+	}
+
+	s = next;
+  }
+
+  return services;
 }
 
 
-// attempt to complete the received answers
 /*---------------------------------------------------------------------------*/
-static void complete_answers(int sock, char* query_arg, FoundAnswerList* alist) {
-  int i;
-  FoundAnswer* a;
-
-  for(i=0; i < alist->length; i++) {
-	a = alist->answers[i];
-	// only look for answers to the initial service query
-	if(a->rr->type != DNS_RR_TYPE_PTR) {
-	  continue;
-	}
-	// skip complete answers and incomplete answers
-	// for which we have already sent a query
-	if(is_answer_complete(a) || (a->srv_query_sent && a->a_query_sent)) {
-	  continue;
-	}
-
-	// skip if this is not a reply to the sent query
-	if(strcmp(a->rr->name, query_arg) != 0) {
-	  continue;
-	}
-
-	complete_answer(sock, alist, a);
-  }
-}
-
-
-/*---------------------------------------------------------------------------*/
-int init_mDNS(int dbg, struct in_addr host) {
+struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   int sock;
   int res;
   struct ip_mreq mreq;
@@ -962,30 +977,31 @@ int init_mDNS(int dbg, struct in_addr host) {
   socklen_t addrlen;
   int enable = 1;
   char param;
+  mDNShandle_t *handle;
 
   debug_mode = dbg;
   debug("Opening socket\n");
   sock = socket(AF_INET, SOCK_DGRAM, 0);
   if(sock < 0) {
 	debug("error opening socket");
-	return -1;
+	return NULL;
   }
 
   param = 32;
   if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*) &param, sizeof(param)) < 0) {
 	printf("error setting multicast TTL");
-	return -1;
+	return NULL;
   }
 
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void*) &enable, sizeof(enable)) < 0) {
 	debug("error setting reuseaddr");
-	return -1;
+	return NULL;
   }
 
   param = 1;
   if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &param, sizeof(param)) < 0) {
 	debug("error seeting multicast_loop");
-	return -1;
+	return NULL;
   }
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -1000,13 +1016,13 @@ int init_mDNS(int dbg, struct in_addr host) {
 
   if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void*) &mreq.imr_interface.s_addr, sizeof(mreq.imr_interface.s_addr)) < 0)  {
 	debug("bound to if failed");
-	return -1;
+	return NULL;
   }
 
   debug("Setting socket options for multicast\n");
   if(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*) &mreq, sizeof(mreq)) < 0) {
 	debug("setsockopt failed");
-	return -1;
+	return NULL;
   }
 
   memset(&addr, 0, sizeof(addr));
@@ -1016,68 +1032,115 @@ int init_mDNS(int dbg, struct in_addr host) {
   addrlen = sizeof(addr);
 
   res = bind(sock, (struct sockaddr *) &addr, addrlen);
-  if(res < 0) {
+  if (res < 0) {
 	debug("error binding socket");
-	return res;
+	return NULL;
   }
 
-  return sock;
+  handle = malloc(sizeof(mDNShandle_t));
+  handle->sock = sock;
+  handle->state = MDNS_IDLE;
+  handle->last = gettime() - 3600;;
+  handle->context.alist = NULL;
+  handle->context.slist = NULL;
+
+  return handle;
 }
 
 
 /*---------------------------------------------------------------------------*/
-void close_mDNS(int sock, bool *query_ctrl) {
-	close(sock);
-	if (query_ctrl) *query_ctrl = false;
+void control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request) {
+	// reset useless when stopped and is taken care by the query if running
+	if (handle->state == MDNS_RUNNING) handle->control = request;
+	else if (request == MDNS_RESET) clear_context(&handle->context);
 }
 
 
 /*---------------------------------------------------------------------------*/
-void free_discovered_list(DiscoveredList* dlist) {
-  int i;
+void close_mDNS(struct mDNShandle_s *handle) {
+	// query is not running, clear here, otherwise the query will self-clear
+	if (handle->state == MDNS_IDLE) {
+		clear_context(&handle->context);
+		closesocket(handle->sock);
+		handle->sock = -1;
+		free(handle);
+	} else handle->state = MDNS_IDLE;
+}
 
-  for(i=0; i < dlist->count; i++) {
-	int j;
-	free(dlist->items[i].name);
-	free(dlist->items[i].hostname);
-	for (j=0; j < dlist->items[i].attr_count; j++) {
-		if (dlist->items[i].attr[j].name) free(dlist->items[i].attr[j].name);
-		if (dlist->items[i].attr[j].value) free(dlist->items[i].attr[j].value);
+
+/*---------------------------------------------------------------------------*/
+static void clear_context(struct context_s *context) {
+  clear_list((void*) context->alist, (void (*)(void*)) &free_a);
+  clear_list((void*) context->slist, (void (*)(void*)) &free_s);
+  context->slist = NULL;
+  context->alist = NULL;
+}
+
+
+/*---------------------------------------------------------------------------*/
+static void free_item_mDNS(mDNSservice_t* slist) {
+	int i;
+
+	free(slist->name);
+	free(slist->hostname);
+
+	for (i = 0; i < slist->attr_count; i++) {
+		if (slist->attr[i].name) free(slist->attr[i].name);
+		if (slist->attr[i].value) free(slist->attr[i].value);
 	}
-	free(dlist->items[i].attr);
-  }
 
-  dlist->count = 0;
+	free(slist->attr);
+
+	free(slist);
 }
 
 
 /*---------------------------------------------------------------------------*/
-bool query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dlist, int runtime) {
+void free_list_mDNS(mDNSservice_t* slist) {
+  clear_list((void*) slist, (void(*)(void*)) &free_item_mDNS);
+}
+
+
+/*---------------------------------------------------------------------------*/
+mDNSservice_t* get_list_mDNS(struct mDNShandle_s *handle) {
+  slist_t *s;
+  mDNSservice_t *services = NULL, *p;
+
+  for (s = handle->context.slist; s; s = s->next) {
+	if (is_complete(s)) {
+		p = malloc(sizeof(mDNSservice_t));
+		p->name = strdup(s->name);
+		p->hostname = strdup(s->hostname);
+		p->addr = s->addr;
+		p->port = s->port;
+		mdns_parse_txt(s->txt, s->txt_length, p);
+		insert_item((void*) s, (void**) &services);
+	}
+  }
+
+  return services;
+}
+
+
+/*---------------------------------------------------------------------------*/
+bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, mdns_callback_t *callback, void *cookie) {
   struct sockaddr_in addr;
   socklen_t addrlen;
-  int res;
-  int parsed;
+  int res, parsed;
   char* recvdata;
-  fd_set active_fd_set;
-  fd_set read_fd_set;
-  fd_set except_fd_set;
-  bool rc = true;
-  FoundAnswerList alist;
-  uint32_t now = gettime_ms();
-  uint32_t timeout = now + runtime*1000;
+  fd_set active_fd_set, read_fd_set, except_fd_set;
+  mDNSservice_t *slist;
+  uint32_t now;
+  bool stop = false, rc = true;
 
-  dlist->count = 0;
+  if (!handle || handle->sock < 0) return false;
 
-  if (sock < 0) return false;
-
-  if(query_arg[0] != '_') {
+  if(query[0] != '_') {
 	debug("only service queries currently supported");
 	return false;;
   }
 
-  init_answer_list(&alist);
-
-  send_query(sock, query_arg, DNS_RR_TYPE_PTR);
+  if (runtime) runtime += gettime();
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(MDNS_PORT);
@@ -1088,52 +1151,59 @@ bool query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dli
   if (!recvdata) return false;
 
   FD_ZERO(&active_fd_set);
-  FD_SET(sock, &active_fd_set);
-
-  if (query_ctrl) *query_ctrl = true;
+  FD_SET(handle->sock, &active_fd_set);
 
   debug("Entering main loop\n");
 
-  // this protects against a u32 rollover
-  while(((now = gettime_ms()) < timeout)) {
-	struct timeval sel_time;
+  handle->context.query = query;
+  handle->context.ttl = ttl;
+  handle->state = MDNS_RUNNING;
 
-	sel_time.tv_sec = 0;
-	sel_time.tv_usec = 50*1000;
+  // this protects against a u32 rollover
+  while (1) {
+	struct timeval sel_time = {0, 50*1000};
+
+	now = gettime();
+
+	// re-launch a search regularly
+	if (handle->last + 20 - now > 0x7fffffff) {
+		send_query(handle->sock, handle->context.query, DNS_RR_TYPE_PTR);
+		handle->last = now;
+	}
 
 	read_fd_set = active_fd_set;
 	except_fd_set = active_fd_set;
 
-	res = select(sock + 1, &read_fd_set, NULL, &except_fd_set, &sel_time);
+	res = select(handle->sock + 1, &read_fd_set, NULL, &except_fd_set, &sel_time);
 
-	if (query_ctrl && !*query_ctrl) {
-		rc = false;
-		break;
+	// finishing or suspending query
+	if (handle->state == MDNS_IDLE || handle->control == MDNS_SUSPEND || (runtime && now > runtime)) break;
+
+	// just clear list
+	if (handle->control == MDNS_RESET) {
+	  clear_context(&handle->context);
+	  handle->control = MDNS_NONE;
+	  handle->last = now - 3600;
 	}
 
-	if(res < 0) {
+	if (res < 0) {
 	  rc = false;
 	  debug("Select error\n");
 	  break;
 	}
 
-	if(res == 0) continue;
+	if (res == 0) continue;
 
-	if(FD_ISSET(sock, &except_fd_set)) {
+	if(FD_ISSET(handle->sock, &except_fd_set)) {
 	  rc = false;
 	  debug("exception on socket");
 	  break;
 	}
 
-	if(!FD_ISSET(sock, &read_fd_set)) {
-	  // I don't even know how we'd ever get here...
-	  continue;
-	}
-
 	// DNS messages should arrive as single packets
 	// so we don't need to worry about partial receives
 	debug("Receiving data\n");
-	res = recvfrom(sock, recvdata, DNS_BUFFER_SIZE, 0, (struct sockaddr *) &addr, &addrlen);
+	res = recvfrom(handle->sock, recvdata, DNS_BUFFER_SIZE, 0, (struct sockaddr *) &addr, &addrlen);
 
 	if (res < 0) {
 	  rc = false;
@@ -1143,36 +1213,48 @@ bool query_mDNS(int sock, bool *query_ctrl, char* query_arg, DiscoveredList* dli
 	  rc = false;
 	  debug("unknown error"); // TODO for TCP means connection closed, but for UDP?
 	}
+
 	debug("Received %u bytes from %s\n", res, inet_ntoa(addr.sin_addr));
 
 	parsed = 0;
 	debug("Attempting to parse received data\n");
+
+	// loop through received data
 	do {
 	  int resp;
 	  mDNSMessage msg;
 
-	  resp = mdns_parse_message_net(recvdata+parsed, res, &msg, &alist);
+	  resp = mdns_parse_message_net(&handle->context, recvdata+parsed, res, &msg);
 
 	  // if nothing else is parsable, stop parsing
-	  if(resp <= 0) {
-		break;
-	  }
+	  if (resp <= 0)	break;
 
 	  parsed += resp;
 	  debug("--Parsed %u bytes of %u received bytes\n", parsed, res);
 	} while(parsed < res); // while there is still something to parse
+
 	debug("Finished parsing received data\n");
 
-	// attempt to complete the received answers
-	complete_answers(sock, query_arg, &alist);
-
+	slist = build_update(&handle->context, callback != NULL);
+	if (slist && callback && !(*callback)(slist, cookie, &stop)) free_list_mDNS(slist);
+	if (stop) break;
   }
 
   free(recvdata);
-  prepare_discovered(&alist, dlist);
-  clear_answer_list(&alist);
+
+  // this is request for stop, we have to clean by ourselves
+  if (handle->state == MDNS_IDLE) {
+	  clear_context(&handle->context);
+	  closesocket(handle->sock);
+	  handle->sock = -1;
+	  free(handle);
+  }
+
+  handle->control = MDNS_NONE;
+  handle->state = MDNS_IDLE;
 
   return rc;
 }
+
 
 

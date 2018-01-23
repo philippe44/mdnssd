@@ -1,5 +1,9 @@
 #include "mdnssd-itf.h"
 
+#if !defined(_WIN32)
+#define closesocket close
+#endif
+
 #define DNS_HEADER_SIZE (12)
 #define DNS_MAX_HOSTNAME_LENGTH (253)
 #define DNS_MAX_LABEL_LENGTH (63)
@@ -21,6 +25,8 @@
 // TODO not sure about this
 #define MAX_RR_NAME_SIZE (256)
 #define MAX_DEREFERENCE_COUNT (40)
+
+#define NFREE(p) { if (p) free(p); }
 
 struct mDNSMessageStruct{
   uint16_t id;
@@ -64,50 +70,74 @@ typedef struct {
   void* rdata;
 } mDNSResourceRecord;
 
-typedef struct {
-  mDNSResourceRecord* rr; // the parent RR
-  char* name; // name from PTR
-  char* hostname; // from SRV
-  struct in_addr addr; // from A
-  unsigned short port; // from SRV
+typedef struct slist_s {
+  struct slist_s *next;
+  enum {MDNS_CURRENT, MDNS_UPDATED, MDNS_EXPIRED} status;
+  uint32_t eol[3], seen;
+  char *name, *hostname;
+  struct in_addr addr;
+  uint16_t port;
   int txt_length;
-  char *txt;     	// from TXT
-  int srv_query_sent; // has a srv query already been sent
-  int a_query_sent; // has an a query already been sent
-} FoundAnswer;
+  char *txt;
+} slist_t;
 
-typedef struct {
-  // TODO should use linked list?
-  FoundAnswer* answers[MAX_ANSWERS];
-  int length;
-  int completed_length; // number of complete answers (answers that have both an IP and a port number)
-} FoundAnswerList;
+typedef struct alist_s {
+  struct alist_s *next;
+  uint32_t eol;
+  char *name;
+  struct in_addr addr;
+} alist_t;
+
+typedef struct mDNShandle_s {
+	int sock;
+	enum { MDNS_IDLE, MDNS_RUNNING } state;
+	mDNScontrol_e control;
+	uint32_t last;
+	struct context_s {
+		char *query;
+		uint32_t ttl;
+		slist_t *slist;
+		alist_t *alist;
+	} context;
+} mDNShandle_t;
+
+typedef struct item_s {
+	struct item_s *next;
+} item_t;
+
+static struct item_s *remove_item(void *a, void **alist);
+static struct item_s *insert_item(void *a, void **alist);
+static void clear_list(void* _alist, void (*clean)(void *));
+
+static void store_a(struct context_s *context, mDNSResourceRecord* rr);
+static void store_other(struct context_s *context, char *message, mDNSResourceRecord* rr);
 
 static int debug(const char* format, ...);
-static void init_answer_list(FoundAnswerList* alist);
-static FoundAnswer* add_new_answer(FoundAnswerList* alist);
-static void clear_answer_list(FoundAnswerList* alist);
-static char* prepare_query_string(char* name);
+
 static mDNSFlags* mdns_parse_header_flags(uint16_t data);
 static uint16_t mdns_pack_header_flags(mDNSFlags flags);
 static char* mdns_pack_question(mDNSQuestion* q, size_t* size);
 static void mdns_message_print(mDNSMessage* msg);
-static int mdns_parse_question(char* message, char* data, int size);
-static int mdns_parse_rr_a(char* data, FoundAnswer* a);
-static int mdns_parse_rr_ptr(char* message, char* data, FoundAnswer* a);
-static int mdns_parse_rr_srv(char* message, char* data, FoundAnswer* a);
-static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, FoundAnswer* a);
-static uint16_t get_offset(char* data);
-static char* parse_rr_name(char* message, char* name, int* parsed);
-static void mdns_parse_rdata_type(char* message, mDNSResourceRecord* rr, FoundAnswer* answer);
-static void free_resource_record(mDNSResourceRecord* rr);
-static int mdns_parse_rr(char* message, char* rrdata, int size, FoundAnswerList* alist, int is_answer);
-static int mdns_parse_message_net(char* data, int size, mDNSMessage* msg, FoundAnswerList* alist);
-static mDNSMessage* mdns_build_query_message(char* query_str, uint16_t query_type);
+static mDNSMessage* mdns_build_query_message(char* query, uint16_t query_type);
 static char* mdns_pack_message(mDNSMessage* msg, size_t* pack_length);
-static int send_query(int sock, char* query_arg, uint16_t query_type);
-static int is_answer_complete(FoundAnswer* a);
-static void complete_answer(int sock, FoundAnswerList* alist, FoundAnswer* a);
-static void complete_answers(int sock, char* query_arg, FoundAnswerList* alist);
+
+static int mdns_parse_question(char* message, char* data, int size);
+
+static int mdns_parse_rr_a(char* data, struct in_addr *addr);
+static int mdns_parse_rr_ptr(char* message, char* data, char **name);
+static int mdns_parse_rr_srv(char* message, char* data, char **hostname, unsigned short *port);
+static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, char **txt, int *length);
+static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata, int size, int is_answer);
+static int mdns_parse_message_net(struct context_s *context, char* data, int size, mDNSMessage* msg);
+static char* parse_rr_name(char* message, char* name, int *parsed);
+
+static uint16_t get_offset(char* data);
+
+static void free_resource_record(mDNSResourceRecord* rr);
+static void clear_context(struct context_s *context);
+
+static char* prepare_query_string(char* name);
+static int send_query(int sock, char* query, uint16_t query_type);
+
 
 
