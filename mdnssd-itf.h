@@ -24,11 +24,12 @@ typedef struct txt_attr_s {
 
 typedef struct mDNSservice_s {
   struct mDNSservice_s *next;		// must be first
+  struct in_addr host;				// the host of the service
   char* name; 						// name from PTR
   char* hostname; 					// from SRV
   struct in_addr addr; 				// from A
   unsigned short port; 				// from SRV;
-  unsigned int since;
+  unsigned int since;				// seconds since last seen
   txt_attr_t *attr;
   int attr_count;
 } mDNSservice_t;

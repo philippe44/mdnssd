@@ -72,10 +72,10 @@ typedef struct {
 
 typedef struct slist_s {
   struct slist_s *next;
-  enum {MDNS_CURRENT, MDNS_UPDATED, MDNS_EXPIRED} status;
+  enum {MDNS_CURRENT = 0, MDNS_UPDATED, MDNS_EXPIRED} status;
   uint32_t eol[3], seen;
   char *name, *hostname;
-  struct in_addr addr;
+  struct in_addr addr, host;
   uint16_t port;
   int txt_length;
   char *txt;
@@ -105,12 +105,18 @@ typedef struct item_s {
 	struct item_s *next;
 } item_t;
 
-static struct item_s *remove_item(void *a, void **alist);
-static struct item_s *insert_item(void *a, void **alist);
-static void clear_list(void* _alist, void (*clean)(void *));
+typedef int compare_list_f(void *a, void *b);
+
+static item_t *remove_item(item_t *a, item_t **list);
+static item_t *insert_item(item_t *a, item_t **list);
+/*
+static item_t *insert_ordered_item(item_t *a, item_t **list, compare_list_f *compare);
+static item_t *insert_tail_item(item_t *item, item_t **list);
+*/
+static void   clear_list(item_t *list, void (*clean)(void *));
 
 static void store_a(struct context_s *context, mDNSResourceRecord* rr);
-static void store_other(struct context_s *context, char *message, mDNSResourceRecord* rr);
+static void store_other(struct in_addr host, struct context_s *context, char *message, mDNSResourceRecord* rr);
 
 static int debug(const char* format, ...);
 
@@ -127,8 +133,8 @@ static int mdns_parse_rr_a(char* data, struct in_addr *addr);
 static int mdns_parse_rr_ptr(char* message, char* data, char **name);
 static int mdns_parse_rr_srv(char* message, char* data, char **hostname, unsigned short *port);
 static void mdns_parse_rr_txt(char* message, mDNSResourceRecord* rr, char **txt, int *length);
-static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata, int size, int is_answer);
-static int mdns_parse_message_net(struct context_s *context, char* data, int size, mDNSMessage* msg);
+static int mdns_parse_rr(struct in_addr host, struct context_s *context, char* message, char* rrdata, int size, int is_answer);
+static int mdns_parse_message_net(struct in_addr host, struct context_s *context, char* data, int size, mDNSMessage* msg);
 static char* parse_rr_name(char* message, char* name, int *parsed);
 
 static uint16_t get_offset(char* data);

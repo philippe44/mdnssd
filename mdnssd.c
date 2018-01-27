@@ -52,7 +52,9 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 	mDNSservice_t *s;
 
 	for (s = slist; s; s = s->next) {
-		printf("%s\t%hu\t%-25s %s %u\n", inet_ntoa(s->addr), s->port, s->hostname, s->name, s->since);
+		char *host = strdup(inet_ntoa(s->host));
+		printf("%s %s\t%05hu\t%-25s %s %us\n", host, inet_ntoa(s->addr), s->port, s->hostname, s->name, s->since);
+		free(host);
 		if (debug_mode)
 		{
 			int j;
@@ -61,6 +63,8 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 			}
 		}
 	}
+
+	printf("------------------------------\n");
 
 	/* options to control loop
 	control_mDNS((struct mDNShandle_s*) cookie, MDNS_RESET);

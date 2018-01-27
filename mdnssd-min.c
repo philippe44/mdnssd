@@ -54,7 +54,7 @@
 static int debug_mode;
 
 /*---------------------------------------------------------------------------*/
-int debug(const char* format, ...) {
+static int debug(const char* format, ...) {
   va_list args;
   int ret;
 
@@ -70,7 +70,7 @@ int debug(const char* format, ...) {
 
 
 /*---------------------------------------------------------------------------*/
-static  uint32_t gettime(void) {
+static uint32_t gettime(void) {
 #ifdef _WIN32
 	return GetTickCount() / 1000;
 #else
@@ -88,9 +88,7 @@ static  uint32_t gettime(void) {
 
 
 /*---------------------------------------------------------------------------*/
-static struct item_s *insert_item(void *_item, void **_list) {
-  struct item_s *item = (struct item_s*) _item, **list = (struct item_s**) _list;
-
+static item_t *insert_item(item_t *item, item_t **list) {
   if (*list) item->next = *list;
   else item->next = NULL;
 
@@ -99,10 +97,44 @@ static struct item_s *insert_item(void *_item, void **_list) {
   return item;
 }
 
-/*---------------------------------------------------------------------------*/
-static struct item_s *remove_item(void *_item, void **_list) {
-  struct item_s *item = (struct item_s*) _item, **list = (struct item_s**) _list;
 
+/*---------------------------------------------------------------------------*/
+/*
+static item_t *insert_tail_item(item_t *item, item_t **list) {
+  if (*list) {
+	struct item_s *p = *list;
+	while (p->next) p = p->next;
+	item->next = p->next;
+	p->next = item;
+  } else {
+	item->next = NULL;
+	*list = item;
+  }
+
+  return item;
+}
+*/
+
+
+/*---------------------------------------------------------------------------*/
+/*
+static item_t *insert_ordered_item(item_t *item, item_t **list, int (*compare)(void *a, void *b)) {
+  if (*list) {
+	struct item_s *p = *list;
+	while (p->next && compare(p->next, item) <= 0) p = p->next;
+	item->next = p->next;
+	p->next = item;
+  } else {
+	item->next = NULL;
+	*list = item;
+  }
+
+  return item;
+}
+*/
+
+/*---------------------------------------------------------------------------*/
+static item_t *remove_item(item_t *item, item_t **list) {
   if (item != *list) {
 	struct item_s *p = *list;
 	while (p && p->next != item) p = p->next;
@@ -114,18 +146,13 @@ static struct item_s *remove_item(void *_item, void **_list) {
 }
 
 /*---------------------------------------------------------------------------*/
-static void clear_list(void* _list, void (*free_func)(void *)) {
-  struct item_s *p, *list = (struct item_s*) _list;
-
+static void clear_list(item_t *list, void (*free_func)(void *)) {
   if (!list) return;
-
-  p = list;
-
-  while (p) {
-	struct item_s *next = p->next;
-	if (free_func) (*free_func)(p);
-	else free(p);
-	p = next;
+  while (list) {
+	struct item_s *next = list->next;
+	if (free_func) (*free_func)(list);
+	else free(list);
+	list = next;
   }
 }
 
@@ -309,7 +336,7 @@ static void mdns_message_print(mDNSMessage* msg) {
   mDNSFlags* flags = mdns_parse_header_flags(msg->flags);
 
   if (!flags) return;
-
+/*
   debug("ID: %u\n", msg->id);
   debug("Flags: \n");
   debug("      QR: %u\n", flags->qr);
@@ -328,7 +355,7 @@ static void mdns_message_print(mDNSMessage* msg) {
   debug("NSCOUNT: %u\n", msg->ns_count);
   debug("ARCOUNT: %u\n", msg->ar_count);
   debug("Resource records:\n");
-
+*/
   free(flags);
 }
 
@@ -508,7 +535,7 @@ static void free_resource_record(mDNSResourceRecord* rr) {
 // parse a resource record
 // the answer, authority and additional sections all use the resource record format
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata, int size, int is_answer) {
+static int mdns_parse_rr(struct in_addr host, struct context_s *context, char* message, char* rrdata, int size, int is_answer) {
   mDNSResourceRecord rr;
   int parsed = 0;
   char* cur = rrdata;
@@ -551,6 +578,8 @@ static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata,
   cur += 4;
   parsed += 4;
 
+  debug("      ttl: %u\n", rr.ttl);
+
   memcpy(&(rr.rdata_length), cur, 2);
   rr.rdata_length = ntohs(rr.rdata_length);
   cur += 2;
@@ -566,7 +595,7 @@ static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata,
 
   if (is_answer) {
 	if (rr.type == DNS_RR_TYPE_A) store_a(context, &rr);
-	else store_other(context, message, &rr);
+	else store_other(host, context, message, &rr);
   }
 
   free_resource_record(&rr);
@@ -579,7 +608,7 @@ static int mdns_parse_rr(struct context_s *context, char* message, char* rrdata,
 
 // TODO this only parses the header so far
 /*---------------------------------------------------------------------------*/
-static int mdns_parse_message_net(struct context_s *context, char* data, int size, mDNSMessage* msg) {
+static int mdns_parse_message_net(struct in_addr host, struct context_s *context, char* data, int size, mDNSMessage* msg) {
 
   int parsed = 0;
   int i;
@@ -607,17 +636,17 @@ static int mdns_parse_message_net(struct context_s *context, char* data, int siz
   debug("  Answer records [%u]\n", msg->an_count);
   for(i=0; i < msg->an_count; i++) {
 	//debug("    Answer record %u of %u\n", i+1, msg->an_count);
-	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 1);
+	parsed += mdns_parse_rr(host, context, data, data+parsed, size-parsed, 1);
   }
 
   debug("  Nameserver records [%u] (not shown)\n", msg->ns_count);
   for(i=0; i < msg->ns_count; i++) {
-	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 0);
+	parsed += mdns_parse_rr(host, context, data, data+parsed, size-parsed, 0);
   }
 
   debug("  Additional records [%u] (not shown)\n", msg->ns_count);
   for(i=0; i < msg->ar_count; i++) {
-	parsed += mdns_parse_rr(context, data, data+parsed, size-parsed, 1);
+	parsed += mdns_parse_rr(host, context, data, data+parsed, size-parsed, 1);
   }
 
   return parsed;
@@ -806,21 +835,22 @@ static void store_a(struct context_s *context, mDNSResourceRecord* rr) {
   b->name = strdup(rr->name);
   b->eol = gettime() + rr->ttl;
 
-  insert_item((void*) b, (void**) &context->alist);
+  insert_item((item_t*) b, (item_t**) &context->alist);
 }
 
 
 /*---------------------------------------------------------------------------*/
-slist_t *create_s(char *name, slist_t **list) {
+static slist_t *create_s(struct in_addr host, char *name, slist_t **list) {
   slist_t *s = calloc(1, sizeof(slist_t));
   s->name = strdup(name);
-  insert_item((void*) s, (void**) list);
+  s->host = host;
+  insert_item((item_t*) s, (item_t**) list);
   return s;
 }
 
 
 /*---------------------------------------------------------------------------*/
-static void store_other(struct context_s *context, char *message, mDNSResourceRecord* rr) {
+static void store_other(struct in_addr host, struct context_s *context, char *message, mDNSResourceRecord* rr) {
   slist_t *b = NULL;
   char *name = NULL;
   uint32_t now, ttl;
@@ -830,17 +860,20 @@ static void store_other(struct context_s *context, char *message, mDNSResourceRe
   now = gettime();
   ttl = (context->ttl && context->ttl < rr->ttl) ? context->ttl : rr->ttl;
 
+  // the queuing tool is head insertion, so this reverts the time or arrival
+  // entry with ttl = 0 are not created, deletion must apply to an existing one
   switch (rr->type) {
 
-	// PTR: only use TTL if its 0 which means service disconnect
+	// PTR: get service name
 	case DNS_RR_TYPE_PTR: {
 	  mdns_parse_rr_ptr(message, rr->rdata, &name);
 
 	  // can't factorize the "for/switch" as name is update above
 	  for (b = context->slist; b && strcmp(b->name, name); b = b->next);
-	  if (!b) b = create_s(name, &context->slist);
+	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, name, &context->slist);
 
-	  b->eol[0] = now + ttl;
+	  if (b) b->eol[0] = now + ttl;
+
 	  free(name);
 	  break;
 	}
@@ -853,20 +886,23 @@ static void store_other(struct context_s *context, char *message, mDNSResourceRe
 	  mdns_parse_rr_srv(message, rr->rdata, &hostname, &port);
 
 	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
-	  if (!b) b = create_s(rr->name, &context->slist);
+	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, rr->name, &context->slist);
 
-	  // update port
-	  if (port && b->port != port) {
-		b->port = port;
-		b->status = MDNS_UPDATED;
+	  if (b) {
+		// update port
+		if (port && b->port != port) {
+		  b->port = port;
+		  b->status = MDNS_UPDATED;
+		}
+		// update hostname
+		if (!b->hostname || strcmp(b->hostname, hostname)) {
+		  NFREE(b->hostname);
+		  b->status = MDNS_UPDATED;
+		  b->hostname = strdup(hostname);
+		}
+		b->eol[1] = now + ttl;
 	  }
-	  // update hostname
-	  if (!b->hostname || strcmp(b->hostname, hostname)) {
-		NFREE(b->hostname);
-		b->status = MDNS_UPDATED;
-		b->hostname = strdup(hostname);
-	  }
-	  b->eol[1] = now + ttl;
+
 	  free(hostname);
 	  break;
 	}
@@ -879,25 +915,29 @@ static void store_other(struct context_s *context, char *message, mDNSResourceRe
 	  mdns_parse_rr_txt(message, rr, &txt, &length);
 
 	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
-	  if (!b) b = create_s(rr->name, &context->slist);
+	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, rr->name, &context->slist);
 
-	  // update txt
-	  if (!b->txt || memcmp(b->txt, txt, length)) {
-		NFREE(b->txt);
-		b->txt = malloc(length);
-		b->txt_length = length;
-		memcpy(b->txt, txt, length);
-		b->status = MDNS_UPDATED;
+	  if (b) {
+		// update txt
+		if (!b->txt || memcmp(b->txt, txt, length)) {
+		  NFREE(b->txt);
+		  b->txt = malloc(length);
+		  b->txt_length = length;
+		  memcpy(b->txt, txt, length);
+		  b->status = MDNS_UPDATED;
+		}
+		b->eol[2] = now + ttl;
 	  }
-	  b->eol[2] = now + ttl;
+
 	  free(txt);
 	  break;
 	}
   }
 
-  // when was it last seen
-  if (b) b->seen = now;
+  // set when was it last seen, except for deletion
+  if (b && rr->ttl) b->seen = now;
 }
+
 
 /*---------------------------------------------------------------------------*/
 static mDNSservice_t *build_update(struct context_s *context, bool build) {
@@ -911,16 +951,18 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
   while (a) {
 	alist_t *next = a->next;
 	if (a->eol - now > 0x7fffffff) {
-		remove_item((void*) a, (void**) &context->alist);
+		remove_item((item_t*) a, (item_t**) &context->alist);
 		free_a(a);
 	}
 	a = next;
   }
 
-  // build the update
   s = context->slist;
+  // order of the slist is reverse time of arrival so the order of the services,
+  // as it uses the same queueing tool, will revert that back ... or so I think
   while (s) {
 	slist_t *next = s->next;
+	bool expired;
 
 	// got a complete answer, search for A
 	if (s->hostname && s->port && s->txt) {
@@ -934,30 +976,41 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 		}
 	}
 
-	// build the service list if required
+	expired = s->eol[0] - now > 0x7fffffff || s->eol[1] - now > 0x7fffffff || s->eol[2] - now > 0x7fffffff;
+
+	// a service has expired - must be done before the below check to make sure
+	// that the expiry is after in the queue
+	if (expired) {
+		// set IP & port to zero so that caller knows, but txt is needed
+		if (build && is_complete(s)) {
+			mDNSservice_t *p = calloc(1,sizeof(mDNSservice_t));
+			p->host = s->host;
+			p->name = strdup(s->name);
+			p->hostname = strdup(s->hostname);
+			p->since = now - s->seen;
+			mdns_parse_txt(s->txt, s->txt_length, p);
+			insert_item((item_t*) p, (item_t**) &services);
+		}
+	}
+
+	// a servce has been update, but it might have expired just after - so we
+	// will have both creation & destruction in the response with correct order
 	if (build && is_complete(s) && s->status != MDNS_CURRENT) {
 		mDNSservice_t *p = malloc(sizeof(mDNSservice_t));
+		p->host = s->host;
 		p->name = strdup(s->name);
 		p->hostname = strdup(s->hostname);
 		p->addr = s->addr;
 		p->port = s->port;
 		p->since = now - s->seen;
 		mdns_parse_txt(s->txt, s->txt_length, p);
-		insert_item((void*) p, (void**) &services);
+		insert_item((item_t*)p, (item_t**) &services);
 		s->status = MDNS_CURRENT;
 	}
 
-	// a service has expired
-	if (s->eol[0] - now > 0x7fffffff || s->eol[1] - now > 0x7fffffff || s->eol[2] - now > 0x7fffffff) {
-		// set IP & port to zero so that caller knows, but txt is needed
-		if (build && is_complete(s)) {
-			mDNSservice_t *p = calloc(1,sizeof(mDNSservice_t));
-			p->name = strdup(s->name);
-			p->hostname = strdup(s->hostname);
-			mdns_parse_txt(s->txt, s->txt_length, p);
-			insert_item((void*) p, (void**) &services);
-		}
-		remove_item((void*) s, (void**) &context->slist);
+	// now we can remove the service
+	if (expired) {
+		remove_item((item_t*) s, (item_t**) &context->slist);
 		free_s(s);
 	}
 
@@ -1114,7 +1167,7 @@ mDNSservice_t* get_list_mDNS(struct mDNShandle_s *handle) {
 		p->addr = s->addr;
 		p->port = s->port;
 		mdns_parse_txt(s->txt, s->txt_length, p);
-		insert_item((void*) s, (void**) &services);
+		insert_item((item_t*) s, (item_t**) &services);
 	}
   }
 
@@ -1224,10 +1277,10 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 	  int resp;
 	  mDNSMessage msg;
 
-	  resp = mdns_parse_message_net(&handle->context, recvdata+parsed, res, &msg);
+	  resp = mdns_parse_message_net(addr.sin_addr, &handle->context, recvdata+parsed, res, &msg);
 
 	  // if nothing else is parsable, stop parsing
-	  if (resp <= 0)	break;
+	  if (resp <= 0) break;
 
 	  parsed += resp;
 	  debug("--Parsed %u bytes of %u received bytes\n", parsed, res);
@@ -1237,6 +1290,7 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 
 	slist = build_update(&handle->context, callback != NULL);
 	if (slist && callback && !(*callback)(slist, cookie, &stop)) free_list_mDNS(slist);
+
 	if (stop) break;
   }
 
