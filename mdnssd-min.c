@@ -1103,6 +1103,7 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
 
 /*---------------------------------------------------------------------------*/
 void control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request) {
+	if (!handle) return;
 	// reset useless when stopped and is taken care by the query if running
 	if (handle->state == MDNS_RUNNING) handle->control = request;
 	else if (request == MDNS_RESET) clear_context(&handle->context);
@@ -1111,6 +1112,7 @@ void control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request) {
 
 /*---------------------------------------------------------------------------*/
 void close_mDNS(struct mDNShandle_s *handle) {
+	if (!handle) return;
 	// query is not running, clear here, otherwise the query will self-clear
 	if (handle->state == MDNS_IDLE) {
 		clear_context(&handle->context);
