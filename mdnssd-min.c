@@ -855,7 +855,10 @@ static void store_other(struct in_addr host, struct context_s *context, char *me
   char *name = NULL;
   uint32_t now, ttl;
 
-  if (!strstr(rr->name, context->query))  return;
+  // for a PTR, the rr name must match exactly the query, for others it shall
+  // at least contain it, otherwise it(s not for us
+  if ((rr->type == DNS_RR_TYPE_PTR && strcmp(rr->name, context->query)) ||
+	  !strstr(rr->name, context->query)) return;
 
   now = gettime();
   ttl = (context->ttl && context->ttl < rr->ttl) ? context->ttl : rr->ttl;
