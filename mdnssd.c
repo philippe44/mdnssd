@@ -53,7 +53,9 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 
 	for (s = slist; s; s = s->next) {
 		char *host = strdup(inet_ntoa(s->host));
-		printf("%s %s\t%05hu\t%-25s %s %us\n", host, inet_ntoa(s->addr), s->port, s->hostname, s->name, s->since);
+		//printf("[%s] %s\t%05hu\t%-25s %s %us %s\n", host, inet_ntoa(s->addr), s->port,
+		printf("[%s] %s\t%05hu\t%s %us %s\n", host, inet_ntoa(s->addr), s->port,
+			   /*s->hostname, */s->name, s->since, s->expired ? "EXPIRED" : "ACTIVE");
 		free(host);
 		if (debug_mode)
 		{

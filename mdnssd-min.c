@@ -872,8 +872,8 @@ static void store_other(struct in_addr host, struct context_s *context, char *me
 	  mdns_parse_rr_ptr(message, rr->rdata, &name);
 
 	  // can't factorize the "for/switch" as name is update above
-	  for (b = context->slist; b && strcmp(b->name, name); b = b->next);
-	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, name, &context->slist);
+	  for (b = context->slist; b && (strcmp(b->name, name) || b->host.s_addr != host.s_addr); b = b->next);
+	  if (!b && rr->ttl) b = create_s(host, name, &context->slist);
 
 	  if (b) b->eol[0] = now + ttl;
 
@@ -888,8 +888,8 @@ static void store_other(struct in_addr host, struct context_s *context, char *me
 
 	  mdns_parse_rr_srv(message, rr->rdata, &hostname, &port);
 
-	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
-	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, rr->name, &context->slist);
+	  for (b = context->slist; b && (strcmp(b->name, rr->name) || b->host.s_addr != host.s_addr); b = b->next);
+	  if (!b && rr->ttl) b = create_s(host, rr->name, &context->slist);
 
 	  if (b) {
 		// update port
@@ -917,8 +917,8 @@ static void store_other(struct in_addr host, struct context_s *context, char *me
 
 	  mdns_parse_rr_txt(message, rr, &txt, &length);
 
-	  for (b = context->slist; b && strcmp(b->name, rr->name); b = b->next);
-	  if ((!b || b->host.s_addr != host.s_addr) && rr->ttl) b = create_s(host, rr->name, &context->slist);
+	  for (b = context->slist; b && (strcmp(b->name, rr->name) || b->host.s_addr != host.s_addr); b = b->next);
+	  if (!b && rr->ttl) b = create_s(host, rr->name, &context->slist);
 
 	  if (b) {
 		// update txt
@@ -986,17 +986,20 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 	if (expired) {
 		// set IP & port to zero so that caller knows, but txt is needed
 		if (build && is_complete(s)) {
-			mDNSservice_t *p = calloc(1,sizeof(mDNSservice_t));
+			mDNSservice_t *p = malloc(sizeof(mDNSservice_t));
 			p->host = s->host;
 			p->name = strdup(s->name);
 			p->hostname = strdup(s->hostname);
+			p->addr = s->addr;
+			p->port = s->port;
 			p->since = now - s->seen;
+			p->expired = true;
 			mdns_parse_txt(s->txt, s->txt_length, p);
 			insert_item((item_t*) p, (item_t**) &services);
 		}
 	}
 
-	// a servce has been update, but it might have expired just after - so we
+	// a service has been updated, but it might have expired just after - so we
 	// will have both creation & destruction in the response with correct order
 	if (build && is_complete(s) && s->status != MDNS_CURRENT) {
 		mDNSservice_t *p = malloc(sizeof(mDNSservice_t));
@@ -1006,6 +1009,7 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 		p->addr = s->addr;
 		p->port = s->port;
 		p->since = now - s->seen;
+		p->expired = false;
 		mdns_parse_txt(s->txt, s->txt_length, p);
 		insert_item((item_t*)p, (item_t**) &services);
 		s->status = MDNS_CURRENT;
@@ -1171,6 +1175,7 @@ mDNSservice_t* get_list_mDNS(struct mDNShandle_s *handle) {
 		p->hostname = strdup(s->hostname);
 		p->addr = s->addr;
 		p->port = s->port;
+		p->expired = false;
 		mdns_parse_txt(s->txt, s->txt_length, p);
 		insert_item((item_t*) s, (item_t**) &services);
 	}

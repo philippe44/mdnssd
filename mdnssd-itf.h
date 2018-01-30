@@ -30,6 +30,7 @@ typedef struct mDNSservice_s {
   struct in_addr addr; 				// from A
   unsigned short port; 				// from SRV;
   unsigned int since;				// seconds since last seen
+  bool expired;
   txt_attr_t *attr;
   int attr_count;
 } mDNSservice_t;
