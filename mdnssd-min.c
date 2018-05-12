@@ -1070,6 +1070,18 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   }
 #endif
 
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(MDNS_PORT);
+  addr.sin_addr.s_addr = INADDR_ANY;
+  addrlen = sizeof(addr);
+
+  res = bind(sock, (struct sockaddr *) &addr, addrlen);
+  if (res < 0) {
+	debug("error binding socket");
+	return NULL;
+  }
+
   memset(&mreq, 0, sizeof(mreq));
   mreq.imr_multiaddr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
   mreq.imr_interface.s_addr = host.s_addr;
@@ -1082,18 +1094,6 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   debug("Setting socket options for multicast\n");
   if(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*) &mreq, sizeof(mreq)) < 0) {
 	debug("setsockopt failed");
-	return NULL;
-  }
-
-  memset(&addr, 0, sizeof(addr));
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(MDNS_PORT);
-  addr.sin_addr.s_addr = INADDR_ANY;
-  addrlen = sizeof(addr);
-
-  res = bind(sock, (struct sockaddr *) &addr, addrlen);
-  if (res < 0) {
-	debug("error binding socket");
 	return NULL;
   }
 
