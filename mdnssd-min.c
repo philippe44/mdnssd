@@ -1064,7 +1064,7 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
 	return NULL;
   }
 
-#if defined(__APPLE__) || defined(__FreeBSD__)
+#if !defined(WIN32)
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
 	debug("error setting reuseport");
   }
