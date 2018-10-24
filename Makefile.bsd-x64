@@ -1,8 +1,9 @@
+CC	= x86_64-cross-freebsd11-gcc 
 CFLAGS  ?= -Wall -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES)
 LDFLAGS ?= -s -lpthread -lm -lrt -lz -L. 
 
-OBJ			= bin/bsd
-EXECUTABLE 	= bin/mdnssd-bsd
+OBJ			= bin/bsd-x64
+EXECUTABLE 	= bin/mdnssd-bsd-x64
 
 include Makefile
 

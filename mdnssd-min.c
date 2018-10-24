@@ -1065,9 +1065,12 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   }
 
 #if !defined(WIN32)
-  if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
-	debug("error setting reuseport");
+  if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, &addrlen)) {
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
+	  debug("error setting reuseport");
+	}
   }
+  enable = 1;
 #endif
 
   memset(&addr, 0, sizeof(addr));
