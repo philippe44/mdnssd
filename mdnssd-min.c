@@ -965,9 +965,10 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
   // as it uses the same queueing tool, will revert that back ... or so I think
   while (s) {
 	slist_t *next = s->next;
-	bool ptr_expired, srv_expired, txt_expired;
+	bool ptr_expired, srv_expired, txt_expired, a_expired;
 
 	// got a complete answer, search for A
+	a_expired = true;
 	if (s->hostname && s->port && s->txt) {
 		for (a = context->alist; a; a = a->next) {
 			if (strcmp(s->hostname, a->name)) continue;
@@ -975,6 +976,7 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 				s->addr.s_addr = a->addr.s_addr;
 				s->status = MDNS_UPDATED;
 			}
+			a_expired = false;
 			break;
 		}
 	}
@@ -985,7 +987,7 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 
 	// a service has expired - must be done before the below check to make sure
 	// that the expiry is after in the queue
-	if (ptr_expired || srv_expired || txt_expired) {
+	if (ptr_expired || srv_expired || txt_expired || a_expired) {
 		// set IP & port to zero so that caller knows, but txt is needed
 		if (build && is_complete(s)) {
 			mDNSservice_t *p = malloc(sizeof(mDNSservice_t));
@@ -1041,6 +1043,10 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 			s->txt_length = 0;
 			s->txt = NULL;
 			s->status = MDNS_EXPIRED; /* needed? */
+		}
+		if (a_expired) {
+			s->addr.s_addr = 0;
+			s->status = MDNS_EXPIRED;
 		}
 	}
 
