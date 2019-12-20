@@ -980,8 +980,8 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 	}
 
 	ptr_expired = s->eol[0] - now > 0x7fffffff;
-        srv_expired = s->eol[1] - now > 0x7fffffff;
-        txt_expired = s->eol[2] - now > 0x7fffffff;
+	srv_expired = s->eol[1] - now > 0x7fffffff;
+	txt_expired = s->eol[2] - now > 0x7fffffff;
 
 	// a service has expired - must be done before the below check to make sure
 	// that the expiry is after in the queue
@@ -1022,28 +1022,27 @@ static mDNSservice_t *build_update(struct context_s *context, bool build) {
 		// now we can remove the service
 		remove_item((item_t*) s, (item_t**) &context->slist);
 		free_s(s);
+	} else {
+		// Mark expired RRs invalid
+		if (ptr_expired && s->eol[0]) {
+			s->eol[0] = 0;
+			s->status = MDNS_EXPIRED;
+		}
+		if (srv_expired && s->eol[1]) {
+			s->eol[1] = 0;
+			NFREE(s->hostname);
+			s->port = 0;
+			s->hostname = NULL;
+			s->status = MDNS_EXPIRED; /* needed? */
+		}
+		if (txt_expired && s->eol[2]) {
+			s->eol[2] = 0;
+			NFREE(s->txt);
+			s->txt_length = 0;
+			s->txt = NULL;
+			s->status = MDNS_EXPIRED; /* needed? */
+		}
 	}
-        else {
-          // Mark expired RRs invalid
-          if (ptr_expired && s->eol[0]) {
-            s->eol[0] = 0;
-            s->status = MDNS_EXPIRED;
-          }
-          if (srv_expired && s->eol[1]) {
-            s->eol[1] = 0;
-            NFREE(s->hostname);
-            s->port = 0;
-            s->hostname = NULL;
-            s->status = MDNS_EXPIRED; /* needed? */
-          }
-          if (txt_expired && s->eol[2]) {
-            s->eol[2] = 0;
-            NFREE(s->txt);
-            s->txt_length = 0;
-            s->txt = NULL;
-            s->status = MDNS_EXPIRED; /* needed? */
-          }
-        }
 
 	s = next;
   }
