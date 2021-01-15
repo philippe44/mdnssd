@@ -1094,7 +1094,8 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   }
 
 #if !defined(WIN32)
-  if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, &addrlen)) {
+  enable = sizeof(enable);
+  if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, (void*) &enable)) {
 	enable = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
 	  debug("error setting reuseport");
@@ -1129,12 +1130,10 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
 	return NULL;
   }
 
-  handle = malloc(sizeof(mDNShandle_t));
+  handle = calloc(1, sizeof(mDNShandle_t));
   handle->sock = sock;
   handle->state = MDNS_IDLE;
   handle->last = gettime() - 3600;;
-  handle->context.alist = NULL;
-  handle->context.slist = NULL;
 
   return handle;
 }
@@ -1344,10 +1343,10 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 	  closesocket(handle->sock);
 	  handle->sock = -1;
 	  free(handle);
+  } else {
+	  handle->control = MDNS_NONE;
+	  handle->state = MDNS_IDLE;
   }
-
-  handle->control = MDNS_NONE;
-  handle->state = MDNS_IDLE;
 
   return rc;
 }
