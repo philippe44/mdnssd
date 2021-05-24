@@ -513,7 +513,7 @@ static char* parse_rr_name(char* message, char* name, int* parsed) {
 	name += label_len;
 	if(name[0] == '\0') {
 	  out[out_i] = '\0';
-	  if(!did_jump) {
+	  if(!did_jump && label_len) {
 		pars++;
 	  }
 	  *parsed += pars;
