@@ -56,4 +56,8 @@ Win32
 *.cbproj
 *.obj
 *.o
+*.bak
+*.user
 _backup
+.vs/
+build/
