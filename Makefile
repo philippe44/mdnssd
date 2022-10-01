@@ -1,3 +1,7 @@
+SPLITTED = $(subst -, ,$(CC))
+PLATFORM ?= $(firstword $(SPLITTED))
+HOST ?= $(word 2, $(SPLITTED))
+
 SRC 		= .
 EXECUTABLE	= ./bin/mdns-sd-$(PLATFORM)
 OBJ		= build/$(PLATFORM)
