@@ -1,6 +1,6 @@
 # Introduction
-mdns-sd is a simple mDNS-SD browser inspired from from https://github.com/sudomesh/mdnssd-min
-It has been updated to compile under Linux, OSX and Windows and split into a library and a test program so that it can be included into various project.
+This is a simple mDNS-SD browser inspired from from https://github.com/sudomesh/mdnssd-min
+It has been updated to compile under Linux, OSX and Windows and split into a integrable part and a test program so that it can be included into various projects.
 Makefile are for Linux (x86, x86_64, arm and aarch64) and Windows with a VS project. The V2 also has osx that is not here for now on master
 
 Compared to v2 branch, this rationalizes build tools and moved to VS. 
