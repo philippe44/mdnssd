@@ -7,6 +7,7 @@ EXECUTABLE	= ./bin/mdns-sd-$(PLATFORM)
 OBJ		= build/$(PLATFORM)
 
 CFLAGS  += -Wall -Wno-stringop-truncation -Wno-format-truncation -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES) -fdata-sections -ffunction-sections 
+LDFLAGS += -s
 
 vpath %.c $(SRC)
 

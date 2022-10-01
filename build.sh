@@ -24,10 +24,10 @@ done
 
 selected=${selected:=$offered}
 
-# then iterate selected targets/compilers
+# then iterate selected platforms/compilers
 for cc in ${selected[@]}
 do
-	IFS=- read -r target os dummy <<< "$cc"
+	IFS=- read -r platform os dummy <<< "$cc"
 	cc=${alias[$cc]:-$cc}
 	
 	if ! command -v $cc &> /dev/null; then
@@ -35,7 +35,7 @@ do
 		continue
 	fi	
 
-	make CC=$cc $clean
+	make CC=$cc PLATFORM=$platform $clean
 	if [ $clean ]; then
 		continue
 	fi
