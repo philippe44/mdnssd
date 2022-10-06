@@ -6,8 +6,8 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= .
-BIN			= bin/mdns-sd-$(PLATFORM)
-LIB			= lib/$(HOST)/$(PLATFORM)/libmdns-sd.a
+BIN			= bin/mdnssd-$(PLATFORM)
+LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= build/$(PLATFORM)
 
 
@@ -18,7 +18,7 @@ vpath %.c $(SRC)
 
 INCLUDE = -I$(SRC) 
 
-SOURCES = mdnssd-min.c mdnssd.c
+SOURCES = mdnssd-core.c mdnssd.c
 		
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) 
 

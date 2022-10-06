@@ -15,14 +15,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="mdnssd-core.c" />
     <ClCompile Include="mdnssd.c" />
-    <ClCompile Include="mdnssd-min.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{afb3d404-7084-434b-a25e-9c5bdc3fa40a}</ProjectGuid>
-    <RootNamespace>mdns-sd</RootNamespace>
+    <RootNamespace>mdnssd</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

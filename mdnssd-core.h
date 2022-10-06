@@ -1,4 +1,4 @@
-#include "mdnssd-itf.h"
+#include "mdnssd.h"
 
 #if !defined(_WIN32)
 #define closesocket close

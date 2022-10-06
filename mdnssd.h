@@ -1,5 +1,5 @@
-#ifndef __MDNSSD_ITF_H
-#define __MDNSSD_ITF_H
+#ifndef __MDNSSD_H
+#define __MDNSSD_H
 
 #include <sys/types.h>
 #include <stdint.h>
