@@ -10,7 +10,6 @@ BIN			= bin/mdnssd-$(PLATFORM)
 LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= build/$(PLATFORM)
 
-
 CFLAGS  += -Wall -Wno-stringop-truncation -Wno-format-truncation -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES) -fdata-sections -ffunction-sections 
 LDFLAGS += -s
 
@@ -19,7 +18,7 @@ vpath %.c $(SRC)
 INCLUDE = -I$(SRC) 
 
 SOURCES = mdnssd-core.c mdnssd.c
-		
+	
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) 
 
 all: directory $(BIN) $(LIB)
@@ -27,8 +26,8 @@ all: directory $(BIN) $(LIB)
 $(BIN): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LIBRARY) $(LDFLAGS) -o $@
 
-$(LIB): $(OBJECTS)
-	$(AR) rcs $@ $(OBJECTS) 
+$(LIB): $(patsubst %.c,$(BUILDDIR)/%.o,mdnssd.c) 
+	$(AR) rcs $@ $<
 
 directory:
 	@mkdir -p bin
