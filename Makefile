@@ -6,8 +6,10 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= .
-EXECUTABLE	= ./bin/mdns-sd-$(PLATFORM)
-OBJ		= build/$(PLATFORM)
+BIN			= bin/mdns-sd-$(PLATFORM)
+LIB			= lib/$(HOST)/$(PLATFORM)/libmdns-sd.a
+BUILDDIR	= build/$(PLATFORM)
+
 
 CFLAGS  += -Wall -Wno-stringop-truncation -Wno-format-truncation -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES) -fdata-sections -ffunction-sections 
 LDFLAGS += -s
@@ -18,24 +20,23 @@ INCLUDE = -I$(SRC)
 
 SOURCES = mdnssd-min.c mdnssd.c
 		
-OBJECTS = $(patsubst %.c,$(OBJ)/%.o,$(SOURCES)) 
+OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) 
 
-all: $(EXECUTABLE)
+all: directory $(BIN) $(LIB)
 
-$(EXECUTABLE): $(OBJECTS)
+$(BIN): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LIBRARY) $(LDFLAGS) -o $@
 
-$(OBJECTS): | bin $(OBJ)
+$(LIB): $(OBJECTS)
+	$(AR) rcs $@ $(OBJECTS) 
 
-$(OBJ):
-	@mkdir -p $@
-	
-bin:	
+directory:
 	@mkdir -p bin
+	@mkdir -p lib/$(HOST)/$(PLATFORM)	
+	@mkdir -p $(BUILDDIR)/lib
 
-$(OBJ)/%.o : %.c
+$(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
-	
-clean:
-	rm -f $(OBJECTS) $(EXECUTABLE) 
 
+clean:
+	rm -f $(OBJECTS) $(LIBOBJECTS) $(BIN) $(LIB)
