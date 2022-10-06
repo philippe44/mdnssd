@@ -17,7 +17,7 @@ vpath %.c $(SRC)
 
 INCLUDE = -I$(SRC) 
 
-SOURCES = mdnssd-core.c mdnssd.c
+SOURCES = mdnssd-sample.c mdnssd.c
 	
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) 
 
