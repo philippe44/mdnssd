@@ -15,7 +15,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mdnssd-core.c" />
+    <ClCompile Include="mdnssd-sample.c">
+	  <ExcludedFromBuild Condition="'$(Configuration)'!='Sample'">true</ExcludedFromBuild>
+	</ClCompile>
     <ClCompile Include="mdnssd.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
