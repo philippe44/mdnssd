@@ -6,28 +6,28 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= .
-BIN			= bin/mdnssd-$(PLATFORM)
+BIN			= bin/climdnssd-$(PLATFORM)
 LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= build/$(PLATFORM)
 
-CFLAGS  += -Wall -Wno-stringop-truncation -Wno-format-truncation -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES) -fdata-sections -ffunction-sections 
+CFLAGS  += -Wall -Wno-stringop-truncation -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
 LDFLAGS += -s
 
 vpath %.c $(SRC)
 
 INCLUDE = -I$(SRC) 
 
-SOURCES = mdnssd-sample.c mdnssd.c
+SOURCES =  mdnssd.c
 	
-OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) 
+OBJECTS = $(SOURCES:%.c=$(BUILDDIR)/%.o) 
 
 all: directory $(BIN) $(LIB)
 
-$(BIN): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LIBRARY) $(LDFLAGS) -o $@
+$(BIN): $(BUILDDIR)/climdnssd.o $(LIB)
+	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
 
-$(LIB): $(patsubst %.c,$(BUILDDIR)/%.o,mdnssd.c) 
-	$(AR) rcs $@ $<
+$(LIB): $(OBJECTS)
+	$(AR) rcs $@ $^
 
 directory:
 	@mkdir -p bin
@@ -38,4 +38,4 @@ $(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
 
 clean:
-	rm -f $(OBJECTS) $(LIBOBJECTS) $(BIN) $(LIB)
+	rm -f $(BUILDDIR)/*.o $(BIN) $(LIB)
