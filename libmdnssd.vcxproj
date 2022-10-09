@@ -37,11 +37,9 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Label="Configuration">
+    <TargetName>$(ProjectName)-$(Configuration)</TargetName>
     <IntDir>$(SolutionDir)\build\Win32-$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)\lib\win32\$(PlatformTarget)\</OutDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
-    <TargetName>$(ProjectName)d</TargetName>
   </PropertyGroup>
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>

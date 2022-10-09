@@ -91,7 +91,7 @@
     <ClCompile Include="climdnssd.c" />
   </ItemGroup>
   <ItemGroup>
-    <Library Include="lib\win32\x86\libmdnssd.lib" />
+    <Library Include="lib\win32\$(PlatformTarget)\libmdnssd-$(Configuration).lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

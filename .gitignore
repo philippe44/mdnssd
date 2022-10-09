@@ -60,6 +60,7 @@ Win32
 *.a
 *.bak
 *.user
+*.pdb
 _backup
 .vs/
 build/
