@@ -21,19 +21,18 @@ SOURCES =  mdnssd.c
 	
 OBJECTS = $(SOURCES:%.c=$(BUILDDIR)/%.o) 
 
-all: directory $(BIN) lib
+all: lib $(BIN)
 lib: directory $(LIB)
-
-$(BIN): $(BUILDDIR)/climdnssd.o $(LIB)
-	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
-
-$(LIB): $(OBJECTS)
-	$(AR) rcs $@ $^
-
 directory:
 	@mkdir -p bin
 	@mkdir -p lib/$(HOST)/$(PLATFORM)	
 	@mkdir -p $(BUILDDIR)/lib
+
+$(BIN): $(BUILDDIR)/climdnssd.o  $(LIB)
+	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
+
+$(LIB): $(OBJECTS)
+	$(AR) rcs $@ $^
 
 $(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
