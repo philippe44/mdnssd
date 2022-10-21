@@ -32,7 +32,7 @@ $(BIN): $(BUILDDIR)/climdnssd.o  $(LIB)
 	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
 
 $(LIB): $(OBJECTS)
-	$(AR) rcs $@ $^
+	$(AR) -rcs $@ $^
 
 $(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
