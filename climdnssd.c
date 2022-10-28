@@ -18,7 +18,7 @@
 #include <in6addr.h>
 #include <ws2tcpip.h>
 typedef uint32_t in_addr_t;
-#elif defined (linux) || defined (__FreeBSD__) || defined(sun)
+#elif defined (__linux__) || defined (__FreeBSD__) || defined(sun)
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netdb.h>

@@ -47,7 +47,7 @@
 #include <net/if.h>
 #endif
 
-#if defined(linux) || defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/time.h>
 #endif
 
@@ -75,7 +75,7 @@ static uint32_t gettime(void) {
 #ifdef _WIN32
 	return GetTickCount() / 1000;
 #else
-#if defined(linux) || defined(__FreeBSD__)
+#if defined(__linux__) || defined(__FreeBSD__)
 	struct timespec ts;
 	if (!clock_gettime(CLOCK_MONOTONIC, &ts)) {
 		return ts.tv_sec;
