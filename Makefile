@@ -29,7 +29,7 @@ directory:
 	@mkdir -p $(BUILDDIR)/lib
 
 $(BIN): $(BUILDDIR)/climdnssd.o  $(LIB)
-	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
+	$(CC) $^ $(LIBRARY) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@
 
 $(LIB): $(OBJECTS)
 	$(AR) -rcs $@ $^
