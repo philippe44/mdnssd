@@ -15,8 +15,8 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
-#include <in6addr.h>
-#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#pragma comment(lib, "IPHLPAPI.lib")
 typedef uint32_t in_addr_t;
 #elif defined (__linux__) || defined (__FreeBSD__) || defined(sun)
 #include <unistd.h>
@@ -25,11 +25,11 @@ typedef uint32_t in_addr_t;
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 #if defined(sun)
 #include <sys/sockio.h>
 #endif
 #if defined (__FreeBSD__)
-#include <ifaddrs.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #endif
@@ -78,7 +78,6 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 	return false;
 }
 
-
 /*---------------------------------------------------------------------------*/
 // search argv for either stand-along
 // arguments like -d or arguments with a value
@@ -102,7 +101,6 @@ int get_arg(int argc, char* argv[], char* key, char** val) {
   return 0;
 }
 
-
 #if defined(_WIN32)
 /*---------------------------------------------------------------------------*/
 void winsock_init(void) {
@@ -114,141 +112,68 @@ void winsock_init(void) {
 	}
 }
 
-
 /*---------------------------------------------------------------------------*/
 void winsock_close(void) {
 	WSACleanup();
 }
 #endif
 
-
 /*---------------------------------------------------------------------------*/
-#define MAX_INTERFACES 256
-#define DEFAULT_INTERFACE 1
-#if !defined(WIN32)
-#define INVALID_SOCKET (-1)
-#endif
-static in_addr_t get_localhost(char **name)
-{
-#ifdef WIN32
-	char buf[256];
-	struct hostent *h = NULL;
-	struct sockaddr_in LocalAddr;
+struct in_addr get_interface(char* iface) {
+	struct in_addr addr;
 
-	memset(&LocalAddr, 0, sizeof(LocalAddr));
+	// try to get the address from the parameter
+	addr.s_addr = iface && *iface ? inet_addr(iface) : INADDR_NONE;
 
-	gethostname(buf, 256);
-	h = gethostbyname(buf);
+	// if we already are given an address; just use it
+	if (addr.s_addr != INADDR_NONE)  return addr;
+#ifdef _WIN32
+	struct sockaddr_in* host = NULL;
+	ULONG size = sizeof(IP_ADAPTER_ADDRESSES) * 32;
 
-	if (name) *name = strdup(buf);
+	// otherwise we need to loop and find somethign that works
+	IP_ADAPTER_ADDRESSES* adapters = (IP_ADAPTER_ADDRESSES*)malloc(size);
+	int ret = GetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_ANYCAST, 0, adapters, &size);
 
-	if (h != NULL) {
-		memcpy(&LocalAddr.sin_addr, h->h_addr_list[0], 4);
-		return LocalAddr.sin_addr.s_addr;
-	}
-	else return INADDR_ANY;
-#elif defined (__APPLE__) || defined(__FreeBSD__)
-	struct ifaddrs *ifap, *ifa;
-
-	if (name) {
-		*name = malloc(256);
-		gethostname(*name, 256);
-	}
-
-	if (getifaddrs(&ifap) != 0) return INADDR_ANY;
-
-	/* cycle through available interfaces */
-	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-		/* Skip loopback, point-to-point and down interfaces,
-		 * except don't skip down interfaces
-		 * if we're trying to get a list of configurable interfaces. */
-		if ((ifa->ifa_flags & IFF_LOOPBACK) ||
-			(!( ifa->ifa_flags & IFF_UP))) {
+	for (PIP_ADAPTER_ADDRESSES adapter = adapters; adapter; adapter = adapter->Next) {
+		if (adapter->TunnelType == TUNNEL_TYPE_TEREDO ||
+			adapter->OperStatus != IfOperStatusUp || 0)
 			continue;
-		}
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			/* We don't want the loopback interface. */
-			if (((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr.s_addr ==
-				htonl(INADDR_LOOPBACK)) {
-				continue;
+
+		char name[256];
+		wcstombs(name, adapter->FriendlyName, sizeof(name));
+		if (iface && *iface && stricmp(iface, name)) continue;
+
+		for (IP_ADAPTER_UNICAST_ADDRESS* unicast = adapter->FirstUnicastAddress; unicast;
+			unicast = unicast->Next) {
+			if (adapter->FirstGatewayAddress && unicast->Address.lpSockaddr->sa_family == AF_INET) {
+				addr = ((struct sockaddr_in*)unicast->Address.lpSockaddr)->sin_addr;
+				return addr;
 			}
-			return ((struct sockaddr_in *)(ifa->ifa_addr))->sin_addr.s_addr;
-			break;
 		}
 	}
-	freeifaddrs(ifap);
 
-	return INADDR_ANY;
+	return addr;
 #else
-	char szBuffer[MAX_INTERFACES * sizeof (struct ifreq)];
-	struct ifconf ifConf;
-	struct ifreq ifReq;
-	int nResult;
-	long unsigned int i;
-	int LocalSock;
-	struct sockaddr_in LocalAddr;
-	int j = 0;
+	struct ifaddrs* ifaddr;
 
-	if (name) {
-		*name = malloc(256);
-		gethostname(*name, 256);
-	}
+	if (getifaddrs(&ifaddr) == -1) 	return addr;
 
-	/* purify */
-	memset(&ifConf,  0, sizeof(ifConf));
-	memset(&ifReq,   0, sizeof(ifReq));
-	memset(szBuffer, 0, sizeof(szBuffer));
-	memset(&LocalAddr, 0, sizeof(LocalAddr));
-
-	/* Create an unbound datagram socket to do the SIOCGIFADDR ioctl on.  */
-	LocalSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (LocalSock == INVALID_SOCKET) return false;
-	/* Get the interface configuration information... */
-	ifConf.ifc_len = (int)sizeof szBuffer;
-	ifConf.ifc_ifcu.ifcu_buf = (caddr_t) szBuffer;
-	nResult = ioctl(LocalSock, SIOCGIFCONF, &ifConf);
-	if (nResult < 0) {
-		close(LocalSock);
-		return INADDR_ANY;
-	}
-
-	/* Cycle through the list of interfaces looking for IP addresses. */
-	for (i = 0lu; i < (long unsigned int)ifConf.ifc_len && j < DEFAULT_INTERFACE; ) {
-		struct ifreq *pifReq =
-			(struct ifreq *)((caddr_t)ifConf.ifc_req + i);
-		i += sizeof *pifReq;
-		/* See if this is the sort of interface we want to deal with. */
-		memset(ifReq.ifr_name, 0, sizeof(ifReq.ifr_name));
-		strncpy(ifReq.ifr_name, pifReq->ifr_name,
-			sizeof(ifReq.ifr_name) - 1);
-		/* Skip loopback, point-to-point and down interfaces,
-		 * except don't skip down interfaces
-		 * if we're trying to get a list of configurable interfaces. */
-		ioctl(LocalSock, SIOCGIFFLAGS, &ifReq);
-		if ((ifReq.ifr_flags & IFF_LOOPBACK) ||
-			(!(ifReq.ifr_flags & IFF_UP))) {
+	for (struct ifaddrs* ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET ||
+			!(ifa->ifa_flags & IFF_UP) || !(ifa->ifa_flags & IFF_MULTICAST) ||
+			ifa->ifa_flags & IFF_LOOPBACK ||
+			(iface && *iface && strcasecmp(iface, ifa->ifa_name)))
 			continue;
-		}
-		if (pifReq->ifr_addr.sa_family == AF_INET) {
-			/* Get a pointer to the address...*/
-			memcpy(&LocalAddr, &pifReq->ifr_addr,
-				sizeof pifReq->ifr_addr);
-			/* We don't want the loopback interface. */
-			if (LocalAddr.sin_addr.s_addr ==
-				htonl(INADDR_LOOPBACK)) {
-				continue;
-			}
-		}
-		/* increment j if we found an address which is not loopback
-		 * and is up */
-		j++;
-	}
-	close(LocalSock);
 
-	return LocalAddr.sin_addr.s_addr;
+		addr = ((struct sockaddr_in*)ifa->ifa_addr)->sin_addr;
+		break;
+	}
+
+	freeifaddrs(ifaddr);
+	return addr;
 #endif
 }
-
 
 /*---------------------------------------------------------------------------*/
 /*																			 */
@@ -256,9 +181,10 @@ static in_addr_t get_localhost(char **name)
 int main(int argc, char* argv[]) {
   char* query_arg;
   struct mDNShandle_s *handle;
-  char *arg_val;
+  char *arg_val, *addr = NULL;
   int timeout = 0, count = 1;
   struct in_addr host = { INADDR_ANY };
+
 
   // get debug argument
   debug_mode = get_arg(argc, argv, "-d", NULL);
@@ -267,7 +193,7 @@ int main(int argc, char* argv[]) {
   if (get_arg(argc, argv, "-t", &arg_val)) timeout = atoi(arg_val);
 
    // get host argument
-  if (get_arg(argc, argv, "-h", &arg_val)) host.s_addr = inet_addr(arg_val);
+  if (get_arg(argc, argv, "-h", &arg_val)) addr = arg_val;
 
   // get count argument
   if (get_arg(argc, argv, "-c", &arg_val)) count = atoi(arg_val);
@@ -276,7 +202,7 @@ int main(int argc, char* argv[]) {
   query_arg = argv[argc-1];
 
   if (query_arg[0] != '_') {
-	  printf("usage: mdnssd [-h <interface>] [-t <duration>] [-c <count>] [-d] <query>\n");
+	  printf("usage: mdnssd [-h <ip|iface>] [-t <duration>] [-c <count>] [-d] <query>\n");
 	  return 1;
   }
 
@@ -284,8 +210,7 @@ int main(int argc, char* argv[]) {
    winsock_init();
 #endif
 
-  if (host.s_addr == INADDR_ANY) host.s_addr = get_localhost(NULL);
-
+  host = get_interface(addr);
   handle = init_mDNS(debug_mode, host);
 
   if (!handle) {
@@ -296,7 +221,6 @@ int main(int argc, char* argv[]) {
   printf("using interface %s\n", inet_ntoa(host));
 
   while (count--) {
-
 	query_mDNS(handle, query_arg, 0, timeout, &print_services, (void*) handle);
 	printf("===============================================================\n");
 	control_mDNS(handle, MDNS_RESET);

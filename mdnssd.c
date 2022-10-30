@@ -1107,8 +1107,7 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
 
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(MDNS_PORT);
-  addr.sin_addr.s_addr = INADDR_ANY;
+  addr.sin_addr.s_addr = host.s_addr;
   addrlen = sizeof(addr);
 
   res = bind(sock, (struct sockaddr *) &addr, addrlen);
