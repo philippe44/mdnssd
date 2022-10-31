@@ -2,6 +2,10 @@ ifeq ($(CC),cc)
 CC=$(lastword $(subst /, ,$(shell readlink -f `which cc`)))
 endif
 
+ifeq ($(findstring gcc,$(CC)),gcc)
+CFLAGS  += -Wno-stringop-truncation
+endif
+
 PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
@@ -10,7 +14,7 @@ BIN			= bin/climdnssd-$(HOST)-$(PLATFORM)
 LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= build/$(HOST)/$(PLATFORM)
 
-CFLAGS  += -Wall -Wno-stringop-truncation -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
+#CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
 LDFLAGS += -s
 
 vpath %.c $(SRC)
