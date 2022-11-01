@@ -4,6 +4,7 @@ endif
 
 ifeq ($(findstring gcc,$(CC)),gcc)
 CFLAGS  += -Wno-stringop-truncation
+LDFLAGS += -s
 else
 CFLAGS += -fno-temp-file
 endif
@@ -16,8 +17,7 @@ BIN			= bin/climdnssd-$(HOST)-$(PLATFORM)
 LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= build/$(HOST)/$(PLATFORM)
 
-#CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
-LDFLAGS += -s
+CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
 
 vpath %.c $(SRC)
 
