@@ -13,8 +13,8 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= .
-BIN			= bin/climdnssd-$(HOST)-$(PLATFORM)
-LIB			= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
+BIN		= bin/climdnssd-$(HOST)-$(PLATFORM)
+LIB		= lib/$(HOST)/$(PLATFORM)/libmdnssd.a
 BUILDDIR	= bin/$(HOST)/$(PLATFORM)
 
 CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
@@ -30,8 +30,8 @@ OBJECTS = $(SOURCES:%.c=$(BUILDDIR)/%.o)
 all: lib $(BIN)
 lib: directory $(LIB)
 directory:
-	@mkdir -p bin/$(HOST)/$(PLATFORM)	
-	@mkdir -p lib/$(HOST)/$(PLATFORM)		
+	@mkdir -p lib/$(HOST)/$(PLATFORM)	
+	@mkdir -p $(BUILDDIR)		
 
 $(BIN): $(BUILDDIR)/climdnssd.o  $(LIB)
 	$(CC) $^ $(LIBRARY) $(CFLAGS) $(LDFLAGS) -o $@
