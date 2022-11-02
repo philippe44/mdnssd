@@ -46,6 +46,7 @@ typedef uint32_t in_addr_t;
 #include "mdnssd.h"
 
 static int debug_mode;
+static bool verbose;
 
 /*---------------------------------------------------------------------------*/
 bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
@@ -57,11 +58,9 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 		printf("[%s] %s\t%05hu\t%s %us %s\n", host, inet_ntoa(s->addr), s->port,
 			   /*s->hostname, */s->name, s->since, s->expired ? "EXPIRED" : "ACTIVE");
 		free(host);
-		if (debug_mode)
-		{
-			int j;
-			for (j = 0; j < s->attr_count; j++) {
-			  printf("\t%s =  %s\n", s->attr[j].name, s->attr[j].value);
+		if (verbose) {
+			for (int i = 0; i < s->attr_count; i++) {
+			  printf(" %s =  %s\n", s->attr[i].name, s->attr[i].value);
 			}
 		}
 	}
@@ -185,9 +184,11 @@ int main(int argc, char* argv[]) {
   int timeout = 0, count = 1;
   struct in_addr host = { INADDR_ANY };
 
-
   // get debug argument
   debug_mode = get_arg(argc, argv, "-d", NULL);
+
+  // get verbosity argument
+  verbose = get_arg(argc, argv, "-v", NULL);
 
   // get timeout argument
   if (get_arg(argc, argv, "-t", &arg_val)) timeout = atoi(arg_val);
@@ -202,7 +203,7 @@ int main(int argc, char* argv[]) {
   query_arg = argv[argc-1];
 
   if (query_arg[0] != '_') {
-	  printf("usage: mdnssd [-h <ip|iface>] [-t <duration>] [-c <count>] [-d] <query>\n");
+	  printf("usage: mdnssd [-h <ip|iface>] [-v] [-t <duration>] [-c <count>] [-d] <query>\n");
 	  return 1;
   }
 

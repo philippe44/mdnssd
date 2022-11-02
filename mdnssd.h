@@ -42,7 +42,7 @@ typedef enum { MDNS_NONE, MDNS_RESET, MDNS_SUSPEND } mDNScontrol_e;
 typedef bool mdns_callback_t(mDNSservice_t *services, void *cookie, bool *stop);
 
 bool 					query_mDNS(struct mDNShandle_s *handle, char* query_arg,
-								   int ttl, int runtime, mdns_callback_t *callback,
+								   int ttl_max, int runtime, mdns_callback_t *callback,
 								   void *cookie);
 struct mDNShandle_s*	init_mDNS(int dbg, struct in_addr host);
 void 					control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request);

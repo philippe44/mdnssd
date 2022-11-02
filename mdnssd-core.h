@@ -4,6 +4,10 @@
 #define closesocket close
 #endif
 
+#ifndef TTL_MIN
+#define TTL_MIN	30
+#endif
+
 #define DNS_HEADER_SIZE (12)
 #define DNS_MAX_HOSTNAME_LENGTH (253)
 #define DNS_MAX_LABEL_LENGTH (63)
@@ -92,10 +96,10 @@ typedef struct mDNShandle_s {
 	int sock;
 	enum { MDNS_IDLE, MDNS_RUNNING } state;
 	mDNScontrol_e control;
-	uint32_t last;
+	uint32_t next;
 	struct context_s {
 		char *query;
-		uint32_t ttl;
+		uint32_t ttl_max, ttl_min;
 		slist_t *slist;
 		alist_t *alist;
 	} context;

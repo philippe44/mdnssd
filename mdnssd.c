@@ -561,14 +561,14 @@ static int mdns_parse_rr(struct in_addr host, struct context_s *context, char* m
   }
 
   debug("      Resource Record Name: %s\n", rr.name);
-
+  
   memcpy(&(rr.type), cur, 2);
   rr.type = ntohs(rr.type);
   cur += 2;
   parsed += 2;
 
   debug("      Resource Record Type: %u\n", rr.type);
-
+  
   memcpy(&(rr.class), cur, 2);
   rr.class = ntohs(rr.class);
   cur += 2;
@@ -576,6 +576,7 @@ static int mdns_parse_rr(struct in_addr host, struct context_s *context, char* m
 
   memcpy(&(rr.ttl), cur, 4);
   rr.ttl = ntohl(rr.ttl);
+  if (rr.ttl < context->ttl_min) context->ttl_min = rr.ttl;
   cur += 4;
   parsed += 4;
 
@@ -691,7 +692,7 @@ static mDNSMessage* mdns_build_query_message(char* query_str, uint16_t query_typ
 
   question.prefer_unicast_response = 0;
   question.qtype = query_type;
-  question.qclass = 1; // class for the internet (RFC 1035 section 3.2.4)
+  question.qclass = 0x8000 | 1; // class for the internet (RFC 1035 section 3.2.4) but ask for unicast
 
   if ((msg->data = mdns_pack_question(&question, &(msg->data_size))) == NULL) {
 	  free(msg);
@@ -862,7 +863,7 @@ static void store_other(struct in_addr host, struct context_s *context, char *me
 	  !strstr(rr->name, context->query)) return;
 
   now = gettime();
-  ttl = (context->ttl && context->ttl < rr->ttl) ? context->ttl : rr->ttl;
+  ttl = (context->ttl_max && context->ttl_max < rr->ttl) ? context->ttl_max : rr->ttl;
 
   // the queuing tool is head insertion, so this reverts the time or arrival
   // entry with ttl = 0 are not created, deletion must apply to an existing one
@@ -1094,17 +1095,6 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
 	return NULL;
   }
 
-#if !defined(WIN32)
-  enable = sizeof(enable);
-  socklen_t len;
-  if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, (void*) &len)) {
-	enable = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,(void*) &enable, sizeof(enable)) < 0) {
-	  debug("error setting reuseport");
-	}
-  }
-#endif
-
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = host.s_addr;
@@ -1134,7 +1124,7 @@ struct mDNShandle_s *init_mDNS(int dbg, struct in_addr host) {
   handle = calloc(1, sizeof(mDNShandle_t));
   handle->sock = sock;
   handle->state = MDNS_IDLE;
-  handle->last = gettime() - 3600;;
+  handle->next = gettime();
 
   return handle;
 }
@@ -1218,7 +1208,7 @@ mDNSservice_t* get_list_mDNS(struct mDNShandle_s *handle) {
 
 
 /*---------------------------------------------------------------------------*/
-bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, mdns_callback_t *callback, void *cookie) {
+bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl_max, int runtime, mdns_callback_t *callback, void *cookie) {
   struct sockaddr_in addr;
   socklen_t addrlen;
   int res, parsed;
@@ -1251,8 +1241,9 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
   debug("Entering main loop\n");
 
   handle->context.query = query;
-  handle->context.ttl = ttl;
+  handle->context.ttl_max = ttl_max;
   handle->state = MDNS_RUNNING;
+  handle->next = gettime();
 
   // this protects against a u32 rollover
   while (1) {
@@ -1261,9 +1252,10 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 	now = gettime();
 
 	// re-launch a search regularly
-	if (handle->last + 20 - now > 0x7fffffff) {
+	if (handle->next - now > 0x7fffffff) {
 		send_query(handle->sock, handle->context.query, DNS_RR_TYPE_PTR);
-		handle->last = now;
+		handle->context.ttl_min = TTL_MIN;
+		handle->next = now + handle->context.ttl_min;
 	}
 
 	read_fd_set = active_fd_set;
@@ -1272,13 +1264,13 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 	res = select(handle->sock + 1, &read_fd_set, NULL, &except_fd_set, &sel_time);
 
 	// finishing or suspending query
-	if (handle->state == MDNS_IDLE || handle->control == MDNS_SUSPEND || (runtime && now > runtime)) break;
+	if (handle->state == MDNS_IDLE || handle->control == MDNS_SUSPEND || (runtime && runtime - now > 0x7fffffff)) break;
 
 	// just clear list
 	if (handle->control == MDNS_RESET) {
 	  clear_context(&handle->context);
 	  handle->control = MDNS_NONE;
-	  handle->last = now - 3600;
+	  handle->next = now;
 	}
 
 	if (res < 0) {
@@ -1328,7 +1320,9 @@ bool query_mDNS(struct mDNShandle_s *handle, char* query, int ttl, int runtime, 
 	  debug("--Parsed %u bytes of %u received bytes\n", parsed, res);
 	} while(parsed < res); // while there is still something to parse
 
-	debug("Finished parsing received data\n");
+	// time reference is when query was sent
+	handle->next = now + ((3 * handle->context.ttl_min) / 4 < TTL_MIN ? (3 * handle->context.ttl_min) / 4 : TTL_MIN);
+	debug("Finished parsing received data, next query in %d sec\n",  3 * handle->context.ttl_min / 4);
 
 	slist = build_update(&handle->context, callback != NULL);
 	if (slist && callback && !(*callback)(slist, cookie, &stop)) free_list_mDNS(slist);
