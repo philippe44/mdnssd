@@ -1155,15 +1155,17 @@ struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant
 	return NULL;
   }
 
-#if !defined(WIN32)
-  enable = sizeof(enable);
-  socklen_t len;
-  if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, (void*)&len)) {
-	  enable = 1;
-	  if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, sizeof(enable)) < 0) {
-		  debug("error setting reuseport");
-	  }
-  }
+#ifndef _WIN32
+  if (compliant) {
+	enable = sizeof(enable);
+	socklen_t len;
+	if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, (void*)&len)) {
+		enable = 1;
+		if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, sizeof(enable)) < 0) {
+			debug("error setting reuseport");
+		}
+	}
+  }	
 #endif
 
   memset(&addr, 0, sizeof(addr));
@@ -1174,25 +1176,31 @@ struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant
    * an issue with re-using 5353 if a server has just been started on that same host
    */
   if (compliant) addr.sin_port = htons(MDNS_PORT);
+  // Windows must bind this socket to a specific address, other must not (it's *must*)
+#ifdef _WIN32
   addr.sin_addr.s_addr = host.s_addr;
+#else
+  addr.sin_addr.s_addr = INADDR_ANY;
+#endif
   addrlen = sizeof(addr);
-
+ 
   res = bind(sock, (struct sockaddr *) &addr, addrlen);
   if (res < 0) {
 	debug("error binding socket");
 	return NULL;
   }
 
-  memset(&mreq, 0, sizeof(mreq));
-  mreq.imr_multiaddr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
-  mreq.imr_interface.s_addr = host.s_addr;
-
-  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void*) &mreq.imr_interface.s_addr, sizeof(mreq.imr_interface.s_addr)) < 0)  {
+  // set outgoing interface for multicast (optiona)
+  if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void*) &host.s_addr, sizeof(host.s_addr)) < 0)  {
 	debug("bound to if failed");
 	return NULL;
   }
+ 
+  // set multicast groups we are interested by
+  memset(&mreq, 0, sizeof(mreq));
+  mreq.imr_multiaddr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
+  mreq.imr_interface.s_addr = host.s_addr; // optional
 
-  debug("Setting socket options for multicast\n");
   if(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*) &mreq, sizeof(mreq)) < 0) {
 	debug("setsockopt failed");
 	return NULL;
@@ -1303,11 +1311,6 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, char* query, bool unicast, int
 
   if (runtime) runtime += gettime();
 
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(MDNS_PORT);
-  addr.sin_addr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
-  addrlen = sizeof(addr);
-
   recvdata = malloc(DNS_BUFFER_SIZE);
   if (!recvdata) return false;
 
@@ -1367,6 +1370,7 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, char* query, bool unicast, int
 	// DNS messages should arrive as single packets
 	// so we don't need to worry about partial receives
 	debug("Receiving data\n");
+	addrlen = sizeof(addr);
 	res = recvfrom(handle->sock, recvdata, DNS_BUFFER_SIZE, 0, (struct sockaddr *) &addr, &addrlen);
 
 	if (res < 0) {
