@@ -1327,12 +1327,9 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, char* query, bool unicast, int
 
     // re-launch a search regularly
     if (now >= wake && now - last > 1) {
-	static int c;
-	//printf("WAKING UP %d after %d sec, we have %d s and %d a\n", c++, now - last, handle->context.srecords, handle->context.arecords);
 	 wake = now + TTL_MIN;
 	 update_wake(&handle->context, &wake, now);
 	 if (check_query(&handle->context, now)) {
-		 printf("SENDING QUERY after %d\n", now - last);
 		 send_query(handle->sock, handle->context.query, DNS_RR_TYPE_PTR, unicast);
 		 last = now;
 	 }
