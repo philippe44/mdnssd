@@ -1,3 +1,5 @@
+#pragma once
+
 #include "mdnssd.h"
 
 #if !defined(_WIN32)
@@ -5,7 +7,7 @@
 #endif
 
 #ifndef TTL_MIN
-#define TTL_MIN	30
+#define TTL_MIN	120
 #endif
 
 #define DNS_HEADER_SIZE (12)
@@ -76,8 +78,11 @@ typedef struct {
 
 typedef struct slist_s {
   struct slist_s *next;
-  enum {MDNS_CURRENT = 0, MDNS_UPDATED, MDNS_EXPIRED} status;
-  uint32_t eol[3], seen;
+  enum {MDNS_CURRENT = 1, MDNS_UPDATED = 2, MDNS_EXPIRED = 3} status;
+  struct ttl_timing_s {
+	  uint32_t last, wake;
+	  uint32_t ttl;
+  } rr_srv, rr_ptr, rr_txt;
   char *name, *hostname;
   struct in_addr addr, host;
   uint16_t port;
@@ -87,23 +92,22 @@ typedef struct slist_s {
 
 typedef struct alist_s {
   struct alist_s *next;
-  uint32_t eol;
+  struct ttl_timing_s rr;
   char *name;
   struct in_addr addr;
 } alist_t;
 
-typedef struct mDNShandle_s {
+typedef struct mdnssd_handle_s {
 	int sock;
 	enum { MDNS_IDLE, MDNS_RUNNING } state;
-	mDNScontrol_e control;
-	uint32_t next;
+	mdnssd_control_e control;
 	struct context_s {
-		char *query;
-		uint32_t ttl_max, ttl_min;
-		slist_t *slist;
-		alist_t *alist;
+		char* query;
+		slist_t* slist;
+		alist_t* alist;
+		uint32_t srecords, arecords;
 	} context;
-} mDNShandle_t;
+} mdnssd_handle_t;
 
 typedef struct item_s {
 	struct item_s *next;
@@ -128,7 +132,7 @@ static mDNSFlags* mdns_parse_header_flags(uint16_t data);
 static uint16_t mdns_pack_header_flags(mDNSFlags flags);
 static char* mdns_pack_question(mDNSQuestion* q, size_t* size);
 static void mdns_message_print(mDNSMessage* msg);
-static mDNSMessage* mdns_build_query_message(char* query, uint16_t query_type);
+static mDNSMessage* mdns_build_query_message(char* query, uint16_t query_type, bool unicast);
 static char* mdns_pack_message(mDNSMessage* msg, size_t* pack_length);
 
 static int mdns_parse_question(char* message, char* data, int size);
@@ -147,7 +151,7 @@ static void free_resource_record(mDNSResourceRecord* rr);
 static void clear_context(struct context_s *context);
 
 static char* prepare_query_string(char* name);
-static int send_query(int sock, char* query, uint16_t query_type);
+static int send_query(int sock, char* query, uint16_t query_type, bool unicast);
 
 
 

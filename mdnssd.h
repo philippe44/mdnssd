@@ -1,5 +1,4 @@
-#ifndef __MDNSSD_H
-#define __MDNSSD_H
+#pragma once
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -17,13 +16,13 @@
 #include <unistd.h>
 #endif
 
-typedef struct txt_attr_s {
+typedef struct mdnssd_txt_attr_s {
 	char *name;
 	char *value;
-} txt_attr_t;
+} mdnssd_txt_attr_t;
 
-typedef struct mDNSservice_s {
-  struct mDNSservice_s *next;		// must be first
+typedef struct mdnssd_service_s {
+  struct mdnssd_service_s *next;	// must be first
   struct in_addr host;				// the host of the service
   char* name; 						// name from PTR
   char* hostname; 					// from SRV
@@ -31,22 +30,20 @@ typedef struct mDNSservice_s {
   unsigned short port; 				// from SRV;
   unsigned int since;				// seconds since last seen
   bool expired;
-  txt_attr_t *attr;
+  mdnssd_txt_attr_t *attr;
   int attr_count;
-} mDNSservice_t;
+} mdnssd_service_t;
 
-struct mDNShandle_s;
+struct mdnssd_handle_s;
 
-typedef enum { MDNS_NONE, MDNS_RESET, MDNS_SUSPEND } mDNScontrol_e;
+typedef enum { MDNS_NONE, MDNS_RESET, MDNS_SUSPEND } mdnssd_control_e;
 
-typedef bool mdns_callback_t(mDNSservice_t *services, void *cookie, bool *stop);
+typedef bool mdns_callback_t(mdnssd_service_t *services, void *cookie, bool *stop);
 
-bool 					query_mDNS(struct mDNShandle_s *handle, char* query_arg,
-								   int ttl_max, int runtime, mdns_callback_t *callback,
-								   void *cookie);
-struct mDNShandle_s*	init_mDNS(int dbg, struct in_addr host);
-void 					control_mDNS(struct mDNShandle_s *handle, mDNScontrol_e request);
-void 					close_mDNS(struct mDNShandle_s *handle);
-void 					free_list_mDNS(mDNSservice_t *slist);
-mDNSservice_t* 			get_list_mDNS(struct mDNShandle_s *handle);
-#endif
+bool 					mdnssd_query(struct mdnssd_handle_s *handle, char* query_arg, bool unicast,
+								   int runtime, mdns_callback_t *callback, void *cookie);
+struct mdnssd_handle_s*	mdnssd_init(int dbg, struct in_addr host, bool compliant);
+void 					mdnssd_control(struct mdnssd_handle_s *handle, mdnssd_control_e request);
+void 					mdnssd_close(struct mdnssd_handle_s *handle);
+void 					mdnssd_free_list(mdnssd_service_t *slist);
+mdnssd_service_t* 		mdnssd_get_list(struct mdnssd_handle_s *handle);

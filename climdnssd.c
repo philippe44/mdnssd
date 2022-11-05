@@ -49,14 +49,13 @@ static int debug_mode;
 static bool verbose;
 
 /*---------------------------------------------------------------------------*/
-bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
-	mDNSservice_t *s;
+bool print_services(mdnssd_service_t *slist, void *cookie, bool *stop) {
+	mdnssd_service_t *s;
 
 	for (s = slist; s; s = s->next) {
 		char *host = strdup(inet_ntoa(s->host));
-		//printf("[%s] %s\t%05hu\t%-25s %s %us %s\n", host, inet_ntoa(s->addr), s->port,
 		printf("[%s] %s\t%05hu\t%s %us %s\n", host, inet_ntoa(s->addr), s->port,
-			   /*s->hostname, */s->name, s->since, s->expired ? "EXPIRED" : "ACTIVE");
+			   s->name, s->since, s->expired ? "EXPIRED" : "ACTIVE");
 		free(host);
 		if (verbose) {
 			for (int i = 0; i < s->attr_count; i++) {
@@ -65,11 +64,9 @@ bool print_services(mDNSservice_t *slist, void *cookie, bool *stop) {
 		}
 	}
 
-	printf("------------------------------\n");
-
 	/* options to control loop
-	control_mDNS((struct mDNShandle_s*) cookie, MDNS_RESET);
-	control_mDNS((struct mDNShandle_s*) cookie, MDNS_SUSPEND);
+	control_mDNS((struct mdnssd_handle_s*) cookie, MDNS_RESET);
+	control_mDNS((struct mdnssd_handle_s*) cookie, MDNS_SUSPEND);
 	*stop = true;
 	*/
 
@@ -179,9 +176,10 @@ struct in_addr get_interface(char* iface) {
 /*---------------------------------------------------------------------------*/
 int main(int argc, char* argv[]) {
   char* query_arg;
-  struct mDNShandle_s *handle;
+  struct mdnssd_handle_s *handle;
   char *arg_val, *addr = NULL;
   int timeout = 0, count = 1;
+  bool unicast = false, compliant = true;
   struct in_addr host = { INADDR_ANY };
 
   // get debug argument
@@ -189,6 +187,12 @@ int main(int argc, char* argv[]) {
 
   // get verbosity argument
   verbose = get_arg(argc, argv, "-v", NULL);
+
+  // get unicast argument
+  unicast = get_arg(argc, argv, "-u", NULL);
+
+  // get RFC6862 compliant argument
+  compliant = !get_arg(argc, argv, "-r", NULL);
 
   // get timeout argument
   if (get_arg(argc, argv, "-t", &arg_val)) timeout = atoi(arg_val);
@@ -203,7 +207,15 @@ int main(int argc, char* argv[]) {
   query_arg = argv[argc-1];
 
   if (query_arg[0] != '_') {
-	  printf("usage: mdnssd [-h <ip|iface>] [-v] [-t <duration>] [-c <count>] [-d] <query>\n");
+	  printf("usage: mdnssd [-h <ip | iface>] [-t <duration>] [-c <count>] [-v] [-u] [-r] [-d] <query>\n"
+		     "\t-h <ip|iface> : ip address or intefrace name\n"
+			 "\t-t <duration> : duration of each query (default = infinite)\n"
+		     "\t-c <count> : do <count> queries and exit (default = 1)\n"
+		     "\t-v : display TXT records\n"
+		     "\t-u : ask for unicast replies\n"
+		     "\t-r : don't comply to RFC6762 (use random port instead of 5353 to issue queries)\n"
+		     "\t-d : debug (very verbose)\n"
+		     "\t<query> : query to be perfomed, e.g. _raop._tcp.local\n");
 	  return 1;
   }
 
@@ -212,7 +224,7 @@ int main(int argc, char* argv[]) {
 #endif
 
   host = get_interface(addr);
-  handle = init_mDNS(debug_mode, host);
+  handle = mdnssd_init(debug_mode, host, compliant);
 
   if (!handle) {
 	printf("cannot open socket\n");
@@ -222,12 +234,12 @@ int main(int argc, char* argv[]) {
   printf("using interface %s\n", inet_ntoa(host));
 
   while (count--) {
-	query_mDNS(handle, query_arg, 0, timeout, &print_services, (void*) handle);
+	mdnssd_query(handle, query_arg, unicast, timeout, &print_services, (void*) handle);
 	printf("===============================================================\n");
-	control_mDNS(handle, MDNS_RESET);
+	mdnssd_control(handle, MDNS_RESET);
   }
 
-  close_mDNS(handle);
+  mdnssd_close(handle);
 
 #ifdef _WIN32
   winsock_close();
