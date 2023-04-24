@@ -1409,7 +1409,7 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, char* query, bool unicast, int
 	update_wake(&handle->context, &wake, now);
 
 	// use callback if set 
-	if (slist && callback && !(*callback)(slist, cookie, &stop)) mdnssd_free_list(slist);
+	if (callback && !(*callback)(slist, cookie, &stop) && slist) mdnssd_free_list(slist);
 
 	if (stop) break;
   }
