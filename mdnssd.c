@@ -175,7 +175,7 @@ static void free_s(slist_t* s) {
 
 
 /*---------------------------------------------------------------------------*/
-static char* prepare_query_string(char* name) {
+static char* prepare_query_string(const char* name) {
   int i;
   int count;
   int lastdot = 0;
@@ -766,7 +766,7 @@ static void mdns_parse_txt(char *txt, int txt_length, mdnssd_service_t *s) {
 
 
 /*---------------------------------------------------------------------------*/
-static int send_query(int sock, char* query_arg, uint16_t query_type, bool unicast) {
+static int send_query(int sock, const char* query_arg, uint16_t query_type, bool unicast) {
 
   mDNSMessage* msg;
   char* data;
@@ -1292,7 +1292,7 @@ mdnssd_service_t* mdnssd_get_list(struct mdnssd_handle_s *handle) {
 
 
 /*---------------------------------------------------------------------------*/
-bool mdnssd_query(struct mdnssd_handle_s *handle, char* query, bool unicast, int runtime, mdns_callback_t *callback, void *cookie) {
+bool mdnssd_query(struct mdnssd_handle_s *handle, const char* query, bool unicast, int runtime, mdns_callback_t *callback, void *cookie) {
   struct sockaddr_in addr;
   socklen_t addrlen;
   int res, parsed;

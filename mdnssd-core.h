@@ -102,7 +102,7 @@ typedef struct mdnssd_handle_s {
 	enum { MDNS_IDLE, MDNS_RUNNING } state;
 	mdnssd_control_e control;
 	struct context_s {
-		char* query;
+		const char* query;
 		slist_t* slist;
 		alist_t* alist;
 		uint32_t srecords, arecords;
@@ -150,8 +150,8 @@ static uint16_t get_offset(char* data);
 static void free_resource_record(mDNSResourceRecord* rr);
 static void clear_context(struct context_s *context);
 
-static char* prepare_query_string(char* name);
-static int send_query(int sock, char* query, uint16_t query_type, bool unicast);
+static char* prepare_query_string(const char* name);
+static int send_query(int sock, const char* query, uint16_t query_type, bool unicast);
 
 
 

@@ -40,7 +40,7 @@ typedef enum { MDNS_NONE, MDNS_RESET, MDNS_SUSPEND } mdnssd_control_e;
 
 typedef bool mdns_callback_t(mdnssd_service_t *services, void *cookie, bool *stop);
 
-bool 					mdnssd_query(struct mdnssd_handle_s *handle, char* query_arg, bool unicast,
+bool 					mdnssd_query(struct mdnssd_handle_s *handle, const char* query_arg, bool unicast,
 								   int runtime, mdns_callback_t *callback, void *cookie);
 struct mdnssd_handle_s*	mdnssd_init(int dbg, struct in_addr host, bool compliant);
 void 					mdnssd_control(struct mdnssd_handle_s *handle, mdnssd_control_e request);
