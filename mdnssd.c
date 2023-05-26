@@ -1299,8 +1299,8 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, const char* query, bool unicas
   char* recvdata;
   fd_set active_fd_set, read_fd_set, except_fd_set;
   mdnssd_service_t *slist;
-  uint32_t now, last = 0;;
-  bool stop = false, rc = true;
+  uint32_t now, last = 0, last_callback = 0;
+  bool stop = false, rc = true, callback_result;
   
   if (!handle || handle->sock < 0) return false;
 
@@ -1408,8 +1408,14 @@ bool mdnssd_query(struct mdnssd_handle_s *handle, const char* query, bool unicas
 	wake = now + TTL_MIN;
 	update_wake(&handle->context, &wake, now);
 
-	// use callback if set 
-	if (callback && !(*callback)(slist, cookie, &stop) && slist) mdnssd_free_list(slist);
+	// use callback if set, and either we have something new or 30 seconds have passed
+	callback_result = false;
+	if (callback && (slist || last_callback + 30 <= now)) {
+		last_callback = now;
+		callback_result = (*callback)(slist, cookie, &stop);		
+	}
+	// free slist, unless the callback overrode this
+	if (slist && !callback_result) mdnssd_free_list(slist);
 
 	if (stop) break;
   }
