@@ -1157,11 +1157,10 @@ struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant
 
 #ifndef _WIN32
   if (compliant) {
-	enable = sizeof(enable);
-	socklen_t len;
-	if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, (void*)&len)) {
+	socklen_t len = sizeof(enable);
+	if (!getsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &enable, &len)) {
 		enable = 1;
-		if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (void*)&enable, sizeof(enable)) < 0) {
+		if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
 			debug("error setting reuseport");
 		}
 	}
