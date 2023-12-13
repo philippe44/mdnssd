@@ -1047,9 +1047,13 @@ static mdnssd_service_t *update_cache(struct context_s *context, bool build) {
 			p->hostname = strdup(s->hostname);
 			p->addr = s->addr;
 			p->port = s->port;
-			if (s->rr_ptr.last) p->since = now - s->rr_ptr.last;
-			if (s->rr_srv.last && now - s->rr_srv.last > p->since) p->since = now - s->rr_srv.last;
-			if (s->rr_txt.last && now - s->rr_txt.last > p->since) p->since = now - s->rr_txt.last;
+			if (s->rr_ptr.ttl) {
+				if (s->rr_ptr.last) p->since = now - s->rr_ptr.last;
+				if (s->rr_srv.last && now - s->rr_srv.last > p->since) p->since = now - s->rr_srv.last;
+				if (s->rr_txt.last && now - s->rr_txt.last > p->since) p->since = now - s->rr_txt.last;
+			} else {
+				p->since = 0;
+			}
 			p->expired = true;
 			mdns_parse_txt(s->txt, s->txt_length, p);
 			insert_item((item_t*) p, (item_t**) &services);
