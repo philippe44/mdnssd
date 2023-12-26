@@ -1127,7 +1127,6 @@ static mdnssd_service_t *update_cache(struct context_s *context, bool build) {
 struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant) {
   int sock;
   int res;
-  struct ip_mreq mreq;
   struct sockaddr_in addr;
   socklen_t addrlen;
   int enable = 1;
@@ -1145,17 +1144,20 @@ struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant
   param = 32;
   if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, (void*) &param, sizeof(param)) < 0) {
 	printf("error setting multicast TTL");
+	closesocket(sock);
 	return NULL;
   }
 
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void*) &enable, sizeof(enable)) < 0) {
 	debug("error setting reuseaddr");
+	closesocket(sock);
 	return NULL;
   }
 
   param = 1;
   if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (void*) &param, sizeof(param)) < 0) {
 	debug("error seeting multicast_loop");
+	closesocket(sock);
 	return NULL;
   }
 
@@ -1190,24 +1192,69 @@ struct mdnssd_handle_s *mdnssd_init(int dbg, struct in_addr host, bool compliant
   res = bind(sock, (struct sockaddr *) &addr, addrlen);
   if (res < 0) {
 	debug("error binding socket");
+	closesocket(sock);
 	return NULL;
   }
 
-  // set outgoing interface for multicast (optiona)
+  // set outgoing interface for multicast (optional)
   if (setsockopt (sock, IPPROTO_IP, IP_MULTICAST_IF, (void*) &host.s_addr, sizeof(host.s_addr)) < 0)  {
 	debug("bound to if failed");
+	closesocket(sock);
 	return NULL;
   }
  
+#ifdef MANUAL_MEMBERSHIP
+  // join IGMP interest group
+  int sockm = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP);
+  if (sockm < 0) {
+	  closesocket(sock);
+	  return NULL;
+  }
+
+  // Set the destination address and multicast group
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
+
+  // Prepare the IGMP Join message
+  struct igmp_s {
+	  uint8_t  type;
+	  uint8_t  code;
+	  uint16_t ckecksum;
+	  struct in_addr group;
+  } igmp;
+
+  igmp.type = MDNS_IGMP_HOST_MEMBERSHIP_REPORT;
+  igmp.code = 0;
+  igmp.group.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
+  igmp.ckecksum = 0; 
+
+  // Calculate the IGMP checksum
+  igmp.ckecksum = htons(~(igmp.type + (igmp.code << 8) + ntohs(igmp.ckecksum) + igmp.group.s_addr));
+
+  // Send the IGMP Join message
+  if (sendto(sockm, (void*)&igmp, sizeof(igmp), 0, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+	  debug("can't add membership (manual)");
+	  closesocket(sockm);
+	  closesocket(sock);
+	  return NULL;
+  }
+
+  closesocket(sockm);
+#else 
+  struct ip_mreq mreq;
+
   // set multicast groups we are interested by
   memset(&mreq, 0, sizeof(mreq));
   mreq.imr_multiaddr.s_addr = inet_addr(MDNS_MULTICAST_ADDRESS);
   mreq.imr_interface.s_addr = host.s_addr; // optional
 
-  if(setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*) &mreq, sizeof(mreq)) < 0) {
-	debug("setsockopt failed");
-	return NULL;
+  if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void*)&mreq, sizeof(mreq)) < 0) {
+	  debug("can't add membership");
+	  closesocket(sock);
+	  return NULL;
   }
+#endif
 
   handle = calloc(1, sizeof(mdnssd_handle_t));
   handle->sock = sock;

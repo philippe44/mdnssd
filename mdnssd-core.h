@@ -16,6 +16,7 @@
 #define MDNS_MULTICAST_ADDRESS "224.0.0.251"
 #define MDNS_PORT (5353)
 #define DNS_BUFFER_SIZE (32768)
+#define MDNS_IGMP_HOST_MEMBERSHIP_REPORT (0x16)
 
 // TODO find the right number for this
 #define DNS_MESSAGE_MAX_SIZE (4096)
